@@ -1,0 +1,83 @@
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import api from '../services/api';
+
+const NotificationContext = createContext(null);
+
+export function NotificationProvider({ children }) {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [toasts, setToasts] = useState([]);
+
+  // Initial load
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const data = await api.notifications.get();
+        setNotifications(data);
+      } catch (err) {
+        console.error('Failed to load notifications:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  async function addNotification(teacherId, message, type = 'substitution') {
+    const notif = {
+      id: 'notif_' + Date.now() + Math.random(),
+      teacherId,
+      message,
+      type,
+      read: false,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...notifications, notif];
+    setNotifications(updated);
+    await api.notifications.create(notif);
+  }
+
+  async function markRead(notifId) {
+    const updated = notifications.map(n => n.id === notifId ? { ...n, read: true } : n);
+    setNotifications(updated);
+    await api.notifications.update(notifId, { read: true });
+  }
+
+  async function markAllRead(teacherId) {
+    const updated = notifications.map(n => n.teacherId === teacherId ? { ...n, read: true } : n);
+    setNotifications(updated);
+    
+    // For bulk mark read, we still need to update each or use a query
+    // To keep it simple and granular:
+    for (const n of updated.filter(n => n.teacherId === teacherId && n.read)) {
+      await api.notifications.update(n.id, { read: true });
+    }
+  }
+
+  function getTeacherNotifications(teacherId) {
+    return notifications.filter(n => n.teacherId === teacherId);
+  }
+
+  const showToast = useCallback((message, type = 'info') => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
+
+  function dismissToast(id) {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }
+
+  return (
+    <NotificationContext.Provider value={{
+      notifications, loading, addNotification, markRead, markAllRead,
+      getTeacherNotifications, toasts, showToast, dismissToast,
+    }}>
+      {children}
+    </NotificationContext.Provider>
+  );
+}
+
+export function useNotification() {
+  return useContext(NotificationContext);
+}
