@@ -657,10 +657,19 @@ function LeavesTab() {
                   <div className="teacher-avatar-sm">{l.teacher_name[0]}</div>
                   <div>
                     <strong>{l.teacher_name}</strong>
-                    <div className="text-sm text-dim">Requested: {l.day}</div>
+                    <div className="text-sm text-dim">
+                      {l.day} {l.leave_date && `(${l.leave_date})`}
+                    </div>
                   </div>
                 </div>
                 <p className="leave-reason">"{l.reason}"</p>
+                {l.document_link && (
+                  <div style={{ margin: '0.5rem 0', padding: '0.5rem', background: 'var(--bg-app)', borderRadius: '4px' }}>
+                    <a href={l.document_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.875rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      📄 View Supported Document
+                    </a>
+                  </div>
+                )}
                 <div className="leave-actions">
                   <button className="btn-sm-outline" onClick={() => checkSubs(l)}>Check Subs</button>
                   <button className="btn-approve-sm" onClick={() => handleApprove(l)}>Approve</button>
@@ -699,13 +708,23 @@ function LeavesTab() {
         <div className="table-container">
           <table className="data-table">
             <thead>
-              <tr><th>Teacher</th><th>Day</th><th>Status</th><th>Applied On</th></tr>
+              <tr><th>Teacher</th><th>Day / Date</th><th>Document</th><th>Status</th><th>Applied On</th></tr>
             </thead>
             <tbody>
               {pastLeaves.map(l => (
                 <tr key={l.id}>
                   <td>{l.teacher_name}</td>
-                  <td>{l.day}</td>
+                  <td>
+                    {l.day}
+                    {l.leave_date && <div className="text-xs text-dim">{l.leave_date}</div>}
+                  </td>
+                  <td>
+                    {l.document_link ? (
+                      <a href={l.document_link} target="_blank" rel="noopener noreferrer" className="text-link text-sm">
+                        📄 View
+                      </a>
+                    ) : '—'}
+                  </td>
                   <td><span className={`badge-${l.status}`}>{l.status.toUpperCase()}</span></td>
                   <td className="text-sm">{new Date(l.created_at).toLocaleDateString()}</td>
                 </tr>

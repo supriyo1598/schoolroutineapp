@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS public.leave_applications (
   teacher_id TEXT REFERENCES public.users(id),
   teacher_name TEXT,
   day TEXT,
+  leave_date TEXT,
+  document_link TEXT,
   reason TEXT,
   status TEXT DEFAULT 'pending', -- pending, approved, rejected
   created_at TIMESTAMPTZ DEFAULT NOW()

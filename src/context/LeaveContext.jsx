@@ -29,13 +29,15 @@ export function LeaveProvider({ children }) {
     return () => clearInterval(interval);
   }, []);
 
-  async function applyLeave(teacherId, teacherName, day, reason) {
+  async function applyLeave(teacherId, teacherName, day, reason, documentLink = '', leaveDate = '') {
     const newLeave = {
       id: 'leave_' + Date.now(),
       teacher_id: teacherId,
       teacher_name: teacherName,
       day,
       reason,
+      document_link: documentLink,
+      leave_date: leaveDate,
       status: 'pending',
       created_at: new Date().toISOString(),
     };

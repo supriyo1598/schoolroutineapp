@@ -15,6 +15,8 @@ export default function TeacherPanel() {
   const [activeTab, setActiveTab] = useState('timetable');
   const [leaveDay, setLeaveDay] = useState('Monday');
   const [leaveReason, setLeaveReason] = useState('');
+  const [leaveDate, setLeaveDate] = useState('');
+  const [documentLink, setDocumentLink] = useState('');
   const [submittingLeave, setSubmittingLeave] = useState(false);
 
   const notifications = getTeacherNotifications(currentUser?.id);
@@ -28,8 +30,10 @@ export default function TeacherPanel() {
     }
     setSubmittingLeave(true);
     try {
-      await applyLeave(currentUser.id, currentUser.name, leaveDay, leaveReason);
+      await applyLeave(currentUser.id, currentUser.name, leaveDay, leaveReason, documentLink, leaveDate);
       setLeaveReason('');
+      setLeaveDate('');
+      setDocumentLink('');
       showToast('Leave application submitted successfully!', 'success');
     } catch {
       showToast('Failed to submit leave. Please try again.', 'error');
@@ -185,6 +189,25 @@ export default function TeacherPanel() {
                   </select>
                 </div>
                 <div className="form-group">
+                  <label>Specific Date</label>
+                  <input 
+                    type="date" 
+                    value={leaveDate} 
+                    onChange={e => setLeaveDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Document Link (Google Drive, Dropbox, etc.)</label>
+                  <input 
+                    type="url" 
+                    value={documentLink} 
+                    onChange={e => setDocumentLink(e.target.value)}
+                    placeholder="https://drive.google.com/..."
+                    required
+                  />
+                </div>
+                <div className="form-group">
                   <label>Reason / Remarks</label>
                   <textarea 
                     value={leaveReason} 
@@ -210,7 +233,8 @@ export default function TeacherPanel() {
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>Day</th>
+                        <th>Day / Date</th>
+                        <th>Document</th>
                         <th>Reason</th>
                         <th>Applied On</th>
                         <th>Status</th>
@@ -219,7 +243,17 @@ export default function TeacherPanel() {
                     <tbody>
                       {myLeaves.map(l => (
                         <tr key={l.id}>
-                          <td>{l.day}</td>
+                          <td>
+                            <strong>{l.day}</strong>
+                            {l.leave_date && <div className="text-xs text-dim">{l.leave_date}</div>}
+                          </td>
+                          <td>
+                            {l.document_link ? (
+                              <a href={l.document_link} target="_blank" rel="noopener noreferrer" className="text-link text-sm">
+                                📄 View
+                              </a>
+                            ) : '—'}
+                          </td>
                           <td className="text-sm">{l.reason}</td>
                           <td className="text-sm">{new Date(l.created_at).toLocaleDateString()}</td>
                           <td>
