@@ -80,6 +80,7 @@ const api = {
           });
         } catch (err) {
           console.error('Supabase user creation failed:', err);
+          throw err;
         }
       }
       const users = await this.getAll();
@@ -179,6 +180,7 @@ const api = {
           });
         } catch (err) {
           console.error('Supabase notification creation failed:', err);
+          throw err;
         }
       }
       const existing = await this.get();
@@ -193,6 +195,7 @@ const api = {
           });
         } catch (err) {
           console.error('Supabase notification update failed:', err);
+          throw err;
         }
       }
       const existing = await this.get();
@@ -223,6 +226,7 @@ const api = {
           });
         } catch (err) {
           console.error('Supabase leave application creation failed:', err);
+          throw err;
         }
       }
       const leaves = await this.getAll();
@@ -237,6 +241,7 @@ const api = {
           });
         } catch (err) {
           console.error('Supabase leave application update failed:', err);
+          throw err;
         }
       }
       const leaves = await this.getAll();
