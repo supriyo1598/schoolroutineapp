@@ -88,13 +88,14 @@ export function exportTeacherTimetablePDF(teacherName, teacherSchedule, classes,
   const body = periods.map(period => {
     const row = [`${period.label}\n${period.time || ''}`];
     for (const day of DAYS) {
-      const slot = teacherSchedule[day]?.[period.id];
-      if (slot) {
-        // Extract class info and section from slot.classId (which might be Id__Section)
-        const [classId, section] = slot.classId.split('__');
-        const cls = classes.find(c => c.id === classId);
-        const displayClass = section ? `${cls?.name || classId} (${section})` : (cls?.name || classId);
-        row.push(`${slot.subject}\n${displayClass}`);
+      const slots = teacherSchedule[day]?.[period.id];
+      if (slots && slots.length > 0) {
+        const content = slots.map(slot => {
+          const cls = classes.find(c => c.id === slot.classId);
+          const displayClass = slot.section ? `${cls?.name || slot.classId} (${slot.section})` : (cls?.name || slot.classId);
+          return `${slot.subject}\n${displayClass}`;
+        }).join('\n---\n');
+        row.push(content);
       } else {
         row.push('-');
       }

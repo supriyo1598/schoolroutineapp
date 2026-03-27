@@ -25,9 +25,10 @@ const TABS = [
 // ===== Teachers Tab =====
 function TeachersTab() {
   const { getAllTeachers, updateTeacher, deleteUser } = useAuth();
-  const { subjects, classes } = useSchedule();
+  const { subjects, classes, getTeacherSchedule, periods, isTeacherAbsent } = useSchedule();
   const { showToast } = useNotification();
   const [editingId, setEditingId] = useState(null);
+  const [viewingTimelineId, setViewingTimelineId] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', phone: '', subjects: [], classes: [] });
   const [showForm, setShowForm] = useState(false);
 
@@ -61,6 +62,69 @@ function TeachersTab() {
         <h2>Teacher Management</h2>
         <p className="tab-desc">Manage approved teachers, assign subjects and classes.</p>
       </div>
+
+      {viewingTimelineId && (
+        <div className="modal-overlay">
+          <div className="modal modal-lg" style={{ maxWidth: '90%' }}>
+            <div className="modal-header">
+              <h3>{teachers.find(t => t.id === viewingTimelineId)?.name}'s Timetable</h3>
+              <button className="modal-close" onClick={() => setViewingTimelineId(null)}>×</button>
+            </div>
+            <div className="modal-body" style={{ overflowX: 'auto' }}>
+              <table className="timetable-table teacher-view-table">
+                <thead>
+                  <tr>
+                    <th className="period-header-cell">Period</th>
+                    {DAYS.map(day => (
+                      <th key={day} className={`day-header ${isTeacherAbsent(viewingTimelineId, day) ? 'absent-column' : ''}`}>
+                        {day}
+                        {isTeacherAbsent(viewingTimelineId, day) && <span className="absent-day-badge">Absent</span>}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {periods.map(period => (
+                    <tr key={period.id} className={period.isBreak ? 'break-row' : ''}>
+                      <td className="period-label-cell">
+                        <strong>{period.label}</strong>
+                        {period.time && <span className="period-time">{period.time}</span>}
+                      </td>
+                      {period.isBreak
+                        ? <td colSpan={DAYS.length} className="break-span">— {period.label} —</td>
+                        : DAYS.map(day => {
+                            const slots = getTeacherSchedule(viewingTimelineId)[day]?.[period.id] || [];
+                            return (
+                              <td key={day} className={`period-cell ${slots.length > 0 ? 'cell-filled teacher-cell' : 'cell-empty'} ${slots.some(s => s.isSubstitution) ? 'cell-substitute' : ''}`}>
+                                {slots.length > 0 ? (
+                                  <div className="cell-assignments">
+                                    {slots.map((slot, idx) => {
+                                      const cls = classes.find(c => c.id === slot.classId);
+                                      return (
+                                        <div key={idx} className={`cell-content ${slot.isSubstitution ? 'cell-substitute' : ''}`}>
+                                          <span className="cell-subject">{slot.subject}</span>
+                                          <span className="cell-class">{cls?.name || slot.classId} {slot.section ? `(${slot.section})` : ''}</span>
+                                          {slot.isSubstitution && <span className="cell-sub-badge">SUB</span>}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <span className="cell-placeholder">—</span>
+                                )}
+                              </td>
+                            );
+                          })
+                      }
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {showForm && editingId && (
         <div className="modal-overlay">
@@ -148,6 +212,7 @@ function TeachersTab() {
                 </td>
                 <td>
                   <div className="action-btns">
+                    <button className="btn-outline-sm" onClick={() => setViewingTimelineId(t.id)}>Timeline</button>
                     <button className="btn-edit" onClick={() => openEdit(t)}>Edit</button>
                     <button className="btn-danger-sm" onClick={async () => { await deleteUser(t.id); showToast('Teacher deleted.', 'info'); }}>Delete</button>
                   </div>
@@ -579,7 +644,7 @@ export default function AdminPanel() {
 }
 // ===== Leaves Tab =====
 function LeavesTab() {
-  const { schedule, markAbsent } = useSchedule();
+  const { schedule, markAbsent, substitutions } = useSchedule();
   const { leaves, updateLeaveStatus, refreshLeaves, loading: leavesLoading } = useLeave();
   const { showToast, addNotification } = useNotification();
   const { getApprovedTeachers } = useAuth();
@@ -624,7 +689,7 @@ function LeavesTab() {
   }
 
   function checkSubs(leave) {
-    const subs = findSubstitutes(leave.teacher_id, leave.day, schedule, teachers);
+    const subs = findSubstitutes(leave.teacher_id, leave.day, schedule, teachers, substitutions);
     setSuggestions(subs);
     setCheckingSub(leave.id);
   }

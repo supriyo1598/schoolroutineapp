@@ -20,7 +20,7 @@ export default function TeacherPanel() {
   const [submittingLeave, setSubmittingLeave] = useState(false);
 
   const notifications = getTeacherNotifications(currentUser?.id);
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => n.unread).length;
 
   async function handleApplyLeave(e) {
     e.preventDefault();
@@ -119,15 +119,21 @@ export default function TeacherPanel() {
                       {period.isBreak
                         ? <td colSpan={5} className="break-span">— {period.label} —</td>
                         : DAYS.map(day => {
-                            const slot = teacherSchedule[day]?.[period.id];
-                            const cls = slot ? classes.find(c => c.id === slot.classId) : null;
+                            const slots = teacherSchedule[day]?.[period.id] || [];
                             return (
-                              <td key={day} className={`period-cell ${slot ? 'cell-filled teacher-cell' : 'cell-empty'} ${slot?.isSubstitution ? 'cell-substitute' : ''}`}>
-                                {slot ? (
-                                  <div className="cell-content">
-                                    <span className="cell-subject">{slot.subject}</span>
-                                    <span className="cell-class">{cls?.name || slot.classId}</span>
-                                    {slot.isSubstitution && <span className="cell-sub-badge">SUB</span>}
+                              <td key={day} className={`period-cell ${slots.length > 0 ? 'cell-filled teacher-cell' : 'cell-empty'} ${slots.some(s => s.isSubstitution) ? 'cell-substitute' : ''}`}>
+                                {slots.length > 0 ? (
+                                  <div className="cell-assignments">
+                                    {slots.map((slot, idx) => {
+                                      const cls = classes.find(c => c.id === slot.classId);
+                                      return (
+                                        <div key={idx} className={`cell-content ${slot.isSubstitution ? 'cell-substitute' : ''}`}>
+                                          <span className="cell-subject">{slot.subject}</span>
+                                          <span className="cell-class">{cls?.name || slot.classId} {slot.section ? `(${slot.section})` : ''}</span>
+                                          {slot.isSubstitution && <span className="cell-sub-badge">SUB</span>}
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 ) : (
                                   <span className="cell-placeholder">—</span>
@@ -159,13 +165,13 @@ export default function TeacherPanel() {
                 </div>
               ) : (
                 [...notifications].reverse().map(n => (
-                  <div key={n.id} className={`notification-item ${n.read ? '' : 'unread'}`}>
+                  <div key={n.id} className={`notification-item ${n.unread ? 'unread' : ''}`}>
                     <div className="notif-icon">🔄</div>
                     <div className="notif-body">
                       <p className="notif-message">{n.message}</p>
-                      <span className="notif-time">{new Date(n.createdAt).toLocaleString()}</span>
+                      <span className="notif-time">{new Date(n.timestamp).toLocaleString()}</span>
                     </div>
-                    {!n.read && <span className="notif-dot" />}
+                    {n.unread && <span className="notif-dot" />}
                   </div>
                 ))
               )}

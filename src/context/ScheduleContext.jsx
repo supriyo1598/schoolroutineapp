@@ -265,7 +265,8 @@ export function ScheduleProvider({ children }) {
             const assignments = Array.isArray(slot) ? slot : [slot];
             const match = assignments.find(a => a.teacherId === teacherId);
             if (match) {
-              result[day][periodId] = { classId, section, subject: match.subject };
+              if (!result[day][periodId]) result[day][periodId] = [];
+              result[day][periodId].push({ classId, section, subject: match.subject });
             }
           }
         }
@@ -286,12 +287,13 @@ export function ScheduleProvider({ children }) {
               const origSlot = state.schedule[compositeId]?.[day]?.[periodId];
               const origAssignments = origSlot ? (Array.isArray(origSlot) ? origSlot : [origSlot]) : [];
               const origAssignment = origAssignments.find(a => a.teacherId === sub.originalTeacherId);
-              result[day][periodId] = {
+              if (!result[day][periodId]) result[day][periodId] = [];
+              result[day][periodId].push({
                 classId,
                 section,
                 subject: origAssignment?.subject || '—',
                 isSubstitution: true,
-              };
+              });
             }
           }
         }

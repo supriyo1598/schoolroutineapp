@@ -29,8 +29,8 @@ export function NotificationProvider({ children }) {
       teacherId,
       message,
       type,
-      read: false,
-      createdAt: new Date().toISOString(),
+      unread: true,
+      timestamp: new Date().toISOString(),
     };
     const updated = [...notifications, notif];
     setNotifications(updated);
@@ -38,19 +38,17 @@ export function NotificationProvider({ children }) {
   }
 
   async function markRead(notifId) {
-    const updated = notifications.map(n => n.id === notifId ? { ...n, read: true } : n);
+    const updated = notifications.map(n => n.id === notifId ? { ...n, unread: false } : n);
     setNotifications(updated);
-    await api.notifications.update(notifId, { read: true });
+    await api.notifications.update(notifId, { unread: false });
   }
 
   async function markAllRead(teacherId) {
-    const updated = notifications.map(n => n.teacherId === teacherId ? { ...n, read: true } : n);
+    const updated = notifications.map(n => n.teacherId === teacherId ? { ...n, unread: false } : n);
     setNotifications(updated);
     
-    // For bulk mark read, we still need to update each or use a query
-    // To keep it simple and granular:
-    for (const n of updated.filter(n => n.teacherId === teacherId && n.read)) {
-      await api.notifications.update(n.id, { read: true });
+    for (const n of updated.filter(n => n.teacherId === teacherId && !n.unread)) {
+      await api.notifications.update(n.id, { unread: false });
     }
   }
 

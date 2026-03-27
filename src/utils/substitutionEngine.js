@@ -1,7 +1,7 @@
 // Auto-substitution engine
 // Given an absent teacher and a day, finds all their periods and suggests substitutes
 
-export function findSubstitutes(absentTeacherId, day, schedule, teachers) {
+export function findSubstitutes(absentTeacherId, day, schedule, teachers, substitutions = {}) {
   const slots = [];
 
   // Find all slots this teacher has on this day
@@ -41,6 +41,14 @@ export function findSubstitutes(absentTeacherId, day, schedule, teachers) {
           }
         }
       }
+      const daySubs = substitutions[day] || {};
+      for (const classId of Object.keys(daySubs)) {
+        for (const pId of Object.keys(daySubs[classId])) {
+           const subsArray = Array.isArray(daySubs[classId][pId]) ? daySubs[classId][pId] : [daySubs[classId][pId]];
+           if (subsArray.some(sub => sub.substituteId === t.id)) count++;
+        }
+      }
+
       // Check if they're free this period
       let busy = false;
       for (const compositeId of Object.keys(schedule)) {
@@ -51,6 +59,18 @@ export function findSubstitutes(absentTeacherId, day, schedule, teachers) {
             busy = true;
             break;
           }
+        }
+      }
+      if (!busy) {
+        for (const compositeId of Object.keys(daySubs)) {
+           const subPeriods = daySubs[compositeId][slot.periodId];
+           if (subPeriods) {
+              const arr = Array.isArray(subPeriods) ? subPeriods : [subPeriods];
+              if (arr.some(sub => sub.substituteId === t.id)) {
+                 busy = true;
+                 break;
+              }
+           }
         }
       }
       return { teacher: t, periodsToday: count, busy };

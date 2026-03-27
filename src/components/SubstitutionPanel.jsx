@@ -27,7 +27,7 @@ export default function SubstitutionPanel() {
     }
     await markAbsent(selectedTeacher, selectedDay);
     // Auto-calculate substitutes
-    const subs = findSubstitutes(selectedTeacher, selectedDay, schedule, teachers);
+    const subs = findSubstitutes(selectedTeacher, selectedDay, schedule, teachers, substitutions);
     setSuggestions(subs);
     showToast(`${teacher?.name} marked absent on ${selectedDay}. ${subs.length} slot(s) need substitution.`, 'info');
   }
@@ -47,7 +47,7 @@ export default function SubstitutionPanel() {
   }
 
   function showSuggestionsForAbsent(teacherId) {
-    const subs = findSubstitutes(teacherId, selectedDay, schedule, teachers);
+    const subs = findSubstitutes(teacherId, selectedDay, schedule, teachers, substitutions);
     setSuggestions(subs);
   }
 
