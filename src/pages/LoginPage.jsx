@@ -92,9 +92,6 @@ export default function LoginPage() {
 
               {tab === 'login' ? (
                 <form className="login-form" onSubmit={handleLogin}>
-                  <div className="login-hint">
-                    <span>Admin login: <code>admin / admin123</code></span>
-                  </div>
                   <div className="form-group">
                     <label>Username</label>
                     <input

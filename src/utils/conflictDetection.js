@@ -8,7 +8,8 @@ function isOverlapAllowed(classId, subject, classes = []) {
   
   // Rule 1: 2nd Language (Hindi, Bengali, etc.)
   const langSubjects = ['hindi', 'bengali', 'sanskrit', 'urdu', 'french'];
-  if (langSubjects.includes(subject.toLowerCase())) return true;
+  const lowerSub = subject.toLowerCase().trim();
+  if (langSubjects.some(lang => lowerSub.includes(lang))) return true;
 
   // Rule 2: Senior Classes (IX, X, XI, XII)
   const [baseClassId] = classId.split('__');
@@ -39,10 +40,13 @@ export function checkConflicts(schedule, { classId, day, periodId, teacherId, su
     }
 
     // Check if overlap is allowed
-    if (!isOverlapAllowed(classId, subject, classes)) {
+    const isNewAllowed = isOverlapAllowed(classId, subject, classes);
+    const areExistingAllowed = assignments.every(a => isOverlapAllowed(classId, a.subject, classes));
+
+    if (!isNewAllowed || !areExistingAllowed) {
       errors.push({
         type: 'SLOT_OCCUPIED',
-        message: `This slot already has a assignment. Remove it first, or use a subject/class that allows simultaneous periods (e.g. 2nd Language or Senior Grades IX-XII).`,
+        message: `This slot already has an assignment. Both the existing and new subjects must allow simultaneous periods (e.g. 2nd Languages or Senior Grades).`,
       });
     }
   }
