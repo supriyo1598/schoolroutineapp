@@ -903,3 +903,119 @@ code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px;
   from { opacity: 0; transform: translateY(-5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ========= SIDEBAR TEACHER SEARCH ========= */
+.sidebar-search-wrapper {
+  position: relative;
+}
+.sidebar-search-input {
+  width: 100%;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.sidebar-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+.sidebar-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ========= DAYS-AS-ROWS TIMETABLE LAYOUT ========= */
+/* Day label column (first column) */
+.day-label-cell {
+  min-width: 110px !important;
+  text-align: center !important;
+  background: #0f172a !important;
+  border-right: 2px solid var(--border) !important;
+  padding: 10px 8px !important;
+  vertical-align: middle !important;
+}
+.day-label-cell strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: block;
+}
+
+/* Period headers (top row - one column per period) */
+.break-header {
+  background: rgba(99, 102, 241, 0.08) !important;
+  color: var(--text-muted) !important;
+  font-style: italic;
+}
+.break-header div:first-child {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Absent day row highlight */
+.absent-row .day-label-cell {
+  background: rgba(239, 68, 68, 0.08) !important;
+  border-right-color: rgba(239, 68, 68, 0.4) !important;
+}
+.absent-row .period-cell {
+  background: rgba(239, 68, 68, 0.04) !important;
+}
+.absent-row .day-label-cell strong {
+  color: var(--danger);
+}
+
+/* Cell assignments container for multiple teachers */
+.cell-assignments {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+}
+
+/* ========= FINISH & SAVE BUTTON ========= */
+.finish-save-btn {
+  background: linear-gradient(135deg, var(--success), #059669) !important;
+  color: white !important;
+  font-weight: 700 !important;
+  padding: 9px 20px !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 3px 12px rgba(16, 185, 129, 0.35);
+  letter-spacing: 0.3px;
+  transition: all 0.2s !important;
+}
+.finish-save-btn:hover:not(:disabled) {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5) !important;
+}
+.finish-save-btn:disabled {
+  opacity: 0.65 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+/* ========= TIMETABLE PERIOD HEADER TIME DISPLAY ========= */
+.timetable-table th .period-time {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 2px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Make the timetable sidebar slightly taller for search */
+.timetable-sidebar {
+  max-height: calc(100vh - 120px);
+}
+
+/* Ensure the nav-icon-wrapper is positioned for badge */
+.nav-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}

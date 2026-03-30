@@ -1,36 +1,17 @@
 // Conflict Detection Rules:
 // 1. Teacher already assigned in this period (same day) across any class → BLOCKED
 // 2. Teacher at max periods for the day (7) → BLOCKED
-// 3. Slot already has a teacher assigned → BLOCKED (unless overlap is allowed)
-
-function isOverlapAllowed(classId, subject, classes = []) {
-  if (!subject) return false;
-  
-  // Rule 1: 2nd Language (Hindi, Bengali, etc.)
-  const langSubjects = ['hindi', 'bengali', 'sanskrit', 'urdu', 'french'];
-  const lowerSub = subject.toLowerCase().trim();
-  if (langSubjects.some(lang => lowerSub.includes(lang))) return true;
-
-  // Rule 2: Senior Classes (IX, X, XI, XII)
-  const [baseClassId] = classId.split('__');
-  const cls = classes.find(c => c.id === baseClassId);
-  const className = cls?.name || '';
-  
-  const seniorGrades = ['grade ix', 'grade x', 'grade xi', 'grade xii'];
-  if (seniorGrades.some(g => className.toLowerCase().includes(g))) return true;
-
-  return false;
-}
+// 3. Same teacher assigned twice in the same slot → BLOCKED
+// Multiple teachers/subjects CAN be assigned to the same slot in any class.
 
 export function checkConflicts(schedule, { classId, day, periodId, teacherId, subject }, teachers = [], classes = []) {
   const errors = [];
 
-  // Check if slot is already occupied
+  // Check if the same teacher is already in THIS exact slot (prevent duplicates)
   const existing = schedule[classId]?.[day]?.[periodId];
   if (existing) {
     const assignments = Array.isArray(existing) ? existing : [existing];
     
-    // Check if the same teacher is already in THIS slot
     if (assignments.some(a => a.teacherId === teacherId)) {
       errors.push({
         type: 'DUPLICATE_TEACHER',
@@ -38,17 +19,7 @@ export function checkConflicts(schedule, { classId, day, periodId, teacherId, su
       });
       return errors;
     }
-
-    // Check if overlap is allowed
-    const isNewAllowed = isOverlapAllowed(classId, subject, classes);
-    const areExistingAllowed = assignments.every(a => isOverlapAllowed(classId, a.subject, classes));
-
-    if (!isNewAllowed || !areExistingAllowed) {
-      errors.push({
-        type: 'SLOT_OCCUPIED',
-        message: `This slot already has an assignment. Both the existing and new subjects must allow simultaneous periods (e.g. 2nd Languages or Senior Grades).`,
-      });
-    }
+    // Multiple teachers/subjects are always allowed in the same slot
   }
 
   // Check teacher conflict: same teacher, same day, same period, any class

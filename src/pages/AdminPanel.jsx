@@ -65,7 +65,7 @@ function TeachersTab() {
 
       {viewingTimelineId && (
         <div className="modal-overlay">
-          <div className="modal modal-lg" style={{ maxWidth: '90%' }}>
+          <div className="modal modal-lg" style={{ maxWidth: '95%' }}>
             <div className="modal-header">
               <h3>{teachers.find(t => t.id === viewingTimelineId)?.name}'s Timetable</h3>
               <button className="modal-close" onClick={() => setViewingTimelineId(null)}>×</button>
@@ -74,48 +74,48 @@ function TeachersTab() {
               <table className="timetable-table teacher-view-table">
                 <thead>
                   <tr>
-                    <th className="period-header-cell">Period</th>
-                    {DAYS.map(day => (
-                      <th key={day} className={`day-header ${isTeacherAbsent(viewingTimelineId, day) ? 'absent-column' : ''}`}>
-                        {day}
-                        {isTeacherAbsent(viewingTimelineId, day) && <span className="absent-day-badge">Absent</span>}
+                    <th className="period-header-cell">Day</th>
+                    {periods.map(period => (
+                      <th key={period.id} className={`day-header ${period.isBreak ? 'break-header' : ''}`}>
+                        <div>{period.label}</div>
+                        {period.time && <div className="period-time">{period.time}</div>}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {periods.map(period => (
-                    <tr key={period.id} className={period.isBreak ? 'break-row' : ''}>
-                      <td className="period-label-cell">
-                        <strong>{period.label}</strong>
-                        {period.time && <span className="period-time">{period.time}</span>}
+                  {DAYS.map(day => (
+                    <tr key={day} className={isTeacherAbsent(viewingTimelineId, day) ? 'absent-row' : ''}>
+                      <td className="period-label-cell day-label-cell">
+                        <strong>{day}</strong>
+                        {isTeacherAbsent(viewingTimelineId, day) && <span className="absent-day-badge">Absent</span>}
                       </td>
-                      {period.isBreak
-                        ? <td colSpan={DAYS.length} className="break-span">— {period.label} —</td>
-                        : DAYS.map(day => {
-                            const slots = getTeacherSchedule(viewingTimelineId)[day]?.[period.id] || [];
-                            return (
-                              <td key={day} className={`period-cell ${slots.length > 0 ? 'cell-filled teacher-cell' : 'cell-empty'} ${slots.some(s => s.isSubstitution) ? 'cell-substitute' : ''}`}>
-                                {slots.length > 0 ? (
-                                  <div className="cell-assignments">
-                                    {slots.map((slot, idx) => {
-                                      const cls = classes.find(c => c.id === slot.classId);
-                                      return (
-                                        <div key={idx} className={`cell-content ${slot.isSubstitution ? 'cell-substitute' : ''}`}>
-                                          <span className="cell-subject">{slot.subject}</span>
-                                          <span className="cell-class">{cls?.name || slot.classId} {slot.section ? `(${slot.section})` : ''}</span>
-                                          {slot.isSubstitution && <span className="cell-sub-badge">SUB</span>}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                ) : (
-                                  <span className="cell-placeholder">—</span>
-                                )}
-                              </td>
-                            );
-                          })
-                      }
+                      {periods.map(period => {
+                        if (period.isBreak) {
+                          return <td key={period.id} className="period-cell break-cell"><span>Break</span></td>;
+                        }
+                        const slots = getTeacherSchedule(viewingTimelineId)[day]?.[period.id] || [];
+                        return (
+                          <td key={period.id} className={`period-cell ${slots.length > 0 ? 'cell-filled teacher-cell' : 'cell-empty'} ${slots.some(s => s.isSubstitution) ? 'cell-substitute' : ''}`}>
+                            {slots.length > 0 ? (
+                              <div className="cell-assignments">
+                                {slots.map((slot, idx) => {
+                                  const cls = classes.find(c => c.id === slot.classId);
+                                  return (
+                                    <div key={idx} className={`cell-content ${slot.isSubstitution ? 'cell-substitute' : ''}`}>
+                                      <span className="cell-subject">{slot.subject}</span>
+                                      <span className="cell-class">{cls?.name || slot.classId}{slot.section ? ` (${slot.section})` : ''}</span>
+                                      {slot.isSubstitution && <span className="cell-sub-badge">SUB</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <span className="cell-placeholder">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -443,18 +443,19 @@ function UsersTab() {
 
 // ===== Timetable Tab =====
 function TimetableTab() {
-  const { classes, schedule, periods } = useSchedule();
-  const { getApprovedTeachers } = useAuth();
+  const { classes, schedule, periods, subjects, substitutions, absentTeachers } = useSchedule();
+  const { getApprovedTeachers, users } = useAuth();
   const { showToast } = useNotification();
   const [selectedClass, setSelectedClass] = useState(classes[0]?.id || '');
   const [selectedSection, setSelectedSection] = useState('A');
+  const [saving, setSaving] = useState(false);
   const teachers = getApprovedTeachers();
 
   const cls = classes.find(c => c.id === selectedClass);
   const sections = useMemo(() => cls?.sections || ['A'], [cls]);
 
   // Ensure we use a valid section even if state is temporarily out of sync
-  const activeSection = useMemo(() => 
+  const activeSection = useMemo(() =>
     sections.includes(selectedSection) ? selectedSection : sections[0]
   , [sections, selectedSection]);
 
@@ -480,6 +481,19 @@ function TimetableTab() {
     }
   }
 
+  async function handleFinishSave() {
+    setSaving(true);
+    try {
+      await api.users.saveAll(users);
+      await api.schedule.save({ classes, periods, subjects, schedule, substitutions, absentTeachers });
+      showToast('✅ Routine saved to server successfully!', 'success');
+    } catch (err) {
+      showToast('❌ Save failed: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="tab-content timetable-tab">
       <div className="tab-header timetable-header">
@@ -499,6 +513,14 @@ function TimetableTab() {
           </button>
           <button className="btn-outline" onClick={handleExportAll}>
             📄 Export All
+          </button>
+          <button
+            className={`btn-primary finish-save-btn ${saving ? 'btn-loading' : ''}`}
+            onClick={handleFinishSave}
+            disabled={saving}
+            title="Save all routine data to the server"
+          >
+            {saving ? '⏳ Saving...' : '✅ Finish & Save'}
           </button>
         </div>
       </div>

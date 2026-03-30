@@ -100,48 +100,48 @@ export default function TeacherPanel() {
               <table className="timetable-table teacher-view-table">
                 <thead>
                   <tr>
-                    <th className="period-header-cell">Period</th>
-                    {DAYS.map(day => (
-                      <th key={day} className={`day-header ${isTeacherAbsent(currentUser?.id, day) ? 'absent-column' : ''}`}>
-                        {day}
-                        {isTeacherAbsent(currentUser?.id, day) && <span className="absent-day-badge">Absent</span>}
+                    <th className="period-header-cell">Day</th>
+                    {periods.map(period => (
+                      <th key={period.id} className={`day-header ${period.isBreak ? 'break-header' : ''}`}>
+                        <div>{period.label}</div>
+                        {period.time && <div className="period-time">{period.time}</div>}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {periods.map(period => (
-                    <tr key={period.id} className={period.isBreak ? 'break-row' : ''}>
-                      <td className="period-label-cell">
-                        <strong>{period.label}</strong>
-                        {period.time && <span className="period-time">{period.time}</span>}
+                  {DAYS.map(day => (
+                    <tr key={day} className={isTeacherAbsent(currentUser?.id, day) ? 'absent-row' : ''}>
+                      <td className="period-label-cell day-label-cell">
+                        <strong>{day}</strong>
+                        {isTeacherAbsent(currentUser?.id, day) && <span className="absent-day-badge">Absent</span>}
                       </td>
-                      {period.isBreak
-                        ? <td colSpan={5} className="break-span">— {period.label} —</td>
-                        : DAYS.map(day => {
-                            const slots = teacherSchedule[day]?.[period.id] || [];
-                            return (
-                              <td key={day} className={`period-cell ${slots.length > 0 ? 'cell-filled teacher-cell' : 'cell-empty'} ${slots.some(s => s.isSubstitution) ? 'cell-substitute' : ''}`}>
-                                {slots.length > 0 ? (
-                                  <div className="cell-assignments">
-                                    {slots.map((slot, idx) => {
-                                      const cls = classes.find(c => c.id === slot.classId);
-                                      return (
-                                        <div key={idx} className={`cell-content ${slot.isSubstitution ? 'cell-substitute' : ''}`}>
-                                          <span className="cell-subject">{slot.subject}</span>
-                                          <span className="cell-class">{cls?.name || slot.classId} {slot.section ? `(${slot.section})` : ''}</span>
-                                          {slot.isSubstitution && <span className="cell-sub-badge">SUB</span>}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                ) : (
-                                  <span className="cell-placeholder">—</span>
-                                )}
-                              </td>
-                            );
-                          })
-                      }
+                      {periods.map(period => {
+                        if (period.isBreak) {
+                          return <td key={period.id} className="period-cell break-cell"><span>Break</span></td>;
+                        }
+                        const slots = teacherSchedule[day]?.[period.id] || [];
+                        return (
+                          <td key={period.id} className={`period-cell ${slots.length > 0 ? 'cell-filled teacher-cell' : 'cell-empty'} ${slots.some(s => s.isSubstitution) ? 'cell-substitute' : ''}`}>
+                            {slots.length > 0 ? (
+                              <div className="cell-assignments">
+                                {slots.map((slot, idx) => {
+                                  const cls = classes.find(c => c.id === slot.classId);
+                                  return (
+                                    <div key={idx} className={`cell-content ${slot.isSubstitution ? 'cell-substitute' : ''}`}>
+                                      <span className="cell-subject">{slot.subject}</span>
+                                      <span className="cell-class">{cls?.name || slot.classId}{slot.section ? ` (${slot.section})` : ''}</span>
+                                      {slot.isSubstitution && <span className="cell-sub-badge">SUB</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <span className="cell-placeholder">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>

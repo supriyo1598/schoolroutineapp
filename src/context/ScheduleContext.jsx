@@ -254,9 +254,11 @@ export function ScheduleProvider({ children }) {
       
       // Regular schedule
       for (const compositeKey of Object.keys(state.schedule)) {
-        const [classId, section] = compositeKey.includes('__') 
-          ? compositeKey.split('__') 
-          : [compositeKey, 'A'];
+        // Always extract the pure classId (first part before __) so the teacher
+        // view can look it up in the classes array by id to display the name.
+        const parts = compositeKey.split('__');
+        const classId = parts[0];
+        const section = parts[1] || 'A';
           
         const daySchedule = state.schedule[compositeKey]?.[day] || {};
         for (const periodId of Object.keys(daySchedule)) {
@@ -275,9 +277,9 @@ export function ScheduleProvider({ children }) {
       // Substitutions
       for (const compositeId of Object.keys(state.substitutions[day] || {})) {
         const classSubstitutions = state.substitutions[day][compositeId];
-        const [classId, section] = compositeId.includes('__')
-          ? compositeId.split('__')
-          : [compositeId, 'A'];
+        const parts = compositeId.split('__');
+        const classId = parts[0];
+        const section = parts[1] || 'A';
           
         for (const periodId of Object.keys(classSubstitutions)) {
           const subs = classSubstitutions[periodId];
