@@ -11,9 +11,12 @@ import Toast from './components/Toast';
 function ProtectedRoute({ children, allowedRole }) {
   const { currentUser } = useAuth();
   if (!currentUser) return <Navigate to="/login" replace />;
-  if (allowedRole === 'admin' && currentUser.role !== 'admin') return <Navigate to="/teacher" replace />;
+  
+  const isAdmin = currentUser.role === 'admin' || currentUser.role === 'super_admin';
+  
+  if (allowedRole === 'admin' && !isAdmin) return <Navigate to="/teacher" replace />;
   if (allowedRole === 'teacher') {
-    if (currentUser.role === 'admin') return <Navigate to="/admin" replace />;
+    if (isAdmin) return <Navigate to="/admin" replace />;
     if (currentUser.status !== 'approved') return <Navigate to="/pending" replace />;
   }
   return children;
@@ -48,11 +51,13 @@ function AppRoutes() {
     );
   }
 
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
+
   return (
     <Routes>
       <Route path="/login" element={
         currentUser
-          ? <Navigate to={currentUser.role === 'admin' ? '/admin' : currentUser.status === 'approved' ? '/teacher' : '/pending'} replace />
+          ? <Navigate to={isAdmin ? '/admin' : currentUser.status === 'approved' ? '/teacher' : '/pending'} replace />
           : <LoginPage />
       } />
       <Route path="/pending" element={<PendingPage />} />
@@ -66,6 +71,7 @@ function AppRoutes() {
     </Routes>
   );
 }
+
 
 function App() {
   return (

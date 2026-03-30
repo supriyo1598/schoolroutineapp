@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS public.users (
   phone TEXT,
   subjects JSONB DEFAULT '[]',
   classes JSONB DEFAULT '[]',
-  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+  assigned_classes JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 2. Create 'notifications' table

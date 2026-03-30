@@ -23,15 +23,24 @@ export function checkConflicts(schedule, { classId, day, periodId, teacherId, su
   }
 
   // Check teacher conflict: same teacher, same day, same period, any class
-  for (const cId of Object.keys(schedule)) {
-    if (cId === classId) continue;
-    const slot = schedule[cId]?.[day]?.[periodId];
+  for (const compositeKey of Object.keys(schedule)) {
+    if (compositeKey === classId) continue;
+    
+    // Parse compositeKey (e.g. "cls_1__A")
+    const parts = compositeKey.split('__');
+    const targetClassId = parts[0];
+    const section = parts[1] || 'A';
+    
+    const slot = schedule[compositeKey]?.[day]?.[periodId];
     if (slot) {
       const assignments = Array.isArray(slot) ? slot : [slot];
       if (assignments.some(a => a.teacherId === teacherId)) {
+        const cls = classes.find(c => c.id === targetClassId);
+        const className = cls?.name || targetClassId;
+        
         errors.push({
           type: 'TEACHER_CONFLICT',
-          message: `Teacher is already assigned to ${cId} during this period on ${day}.`,
+          message: `Teacher is already assigned to ${className} ${section} during this period on ${day}.`,
         });
         break;
       }

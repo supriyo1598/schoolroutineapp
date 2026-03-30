@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, useState } from 'react';
+import { createContext, useContext, useReducer, useEffect, useState, useMemo } from 'react';
 import api from '../services/api';
 import { DAYS } from '../utils/constants';
 import { useAuth } from './AuthContext';
@@ -177,6 +177,19 @@ export function ScheduleProvider({ children }) {
   const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'saving', 'error'
   const { currentUser } = useAuth();
 
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
+
+  // Role-based filtered classes
+  const filteredClasses = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'super_admin') return state.classes;
+    if (currentUser.role === 'admin') {
+      const assigned = currentUser.assignedClasses || [];
+      return state.classes.filter(c => assigned.includes(c.id));
+    }
+    return state.classes;
+  }, [state.classes, currentUser]);
+
   // Initial load
   useEffect(() => {
     async function loadData() {
@@ -194,9 +207,9 @@ export function ScheduleProvider({ children }) {
     loadData();
   }, []);
 
-  // Sync to API - Only Admin should push global updates
+  // Sync to API - Both Super Admin and Admin can push updates
   useEffect(() => {
-    if (!loading && currentUser?.role === 'admin') {
+    if (!loading && isAdmin) {
       setSyncStatus('saving');
       const timer = setTimeout(() => {
         api.schedule.save(state)
@@ -208,7 +221,8 @@ export function ScheduleProvider({ children }) {
       }, 1000); // 1s debounce to avoid spamming the API
       return () => clearTimeout(timer);
     }
-  }, [state, loading, currentUser]);
+  }, [state, loading, isAdmin]);
+
 
   function placeSlot(classId, day, periodId, teacherId, subject) {
     dispatch({ type: 'PLACE_SLOT', payload: { classId, day, periodId, teacherId, subject } });
@@ -232,6 +246,19 @@ export function ScheduleProvider({ children }) {
 
   function removeSubstitute(classId, day, periodId, substituteId = null) {
     dispatch({ type: 'REMOVE_SUBSTITUTE', payload: { classId, day, periodId, substituteId } });
+  }
+
+  async function saveSchedule() {
+    setSyncStatus('saving');
+    try {
+      await api.schedule.save(state);
+      setSyncStatus('synced');
+      return { success: true };
+    } catch (err) {
+      console.error('Manual save failed:', err);
+      setSyncStatus('error');
+      return { success: false, error: err.message };
+    }
   }
 
   function getEffectiveTeacher(classId, day, periodId) {
@@ -315,6 +342,7 @@ export function ScheduleProvider({ children }) {
   return (
     <ScheduleContext.Provider value={{
       ...state,
+      filteredClasses: filteredClasses || [],
       loading,
       syncStatus,
       dispatch,
@@ -324,6 +352,7 @@ export function ScheduleProvider({ children }) {
       markPresent,
       assignSubstitute,
       removeSubstitute,
+      saveSchedule,
       getEffectiveTeacher,
       isTeacherAbsent,
       getTeacherSchedule,
@@ -333,6 +362,7 @@ export function ScheduleProvider({ children }) {
     </ScheduleContext.Provider>
   );
 }
+
 
 export function useSchedule() {
   return useContext(ScheduleContext);

@@ -3,7 +3,12 @@ import api from '../services/api';
 
 const AuthContext = createContext(null);
 
-const ADMIN_CREDENTIALS = { username: 'admin', password: 'admin123', role: 'admin', name: 'Administrator' };
+const SUPER_ADMIN_CREDENTIALS = { 
+  username: 'superadmin', 
+  password: 'superadmin123', 
+  role: 'super_admin', 
+  name: 'Super Administrator' 
+};
 
 const SESSION_KEY = 'srs_session';
 
@@ -37,27 +42,45 @@ export function AuthProvider({ children }) {
   }, [currentUser]);
 
   async function login(username, password) {
-    // Admin login
-    if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
-      const user = { ...ADMIN_CREDENTIALS };
+    // 1. Super Admin login
+    if (username === SUPER_ADMIN_CREDENTIALS.username && password === SUPER_ADMIN_CREDENTIALS.password) {
+      const user = { ...SUPER_ADMIN_CREDENTIALS };
       setCurrentUser(user);
       return { success: true, user };
     }
-    // Teacher login
-    const teacher = users.find(u => u.username === username && u.password === password);
-    if (!teacher) return { success: false, error: 'Invalid credentials.' };
-    if (teacher.status === 'pending') return { success: false, error: 'pending', user: teacher };
-    if (teacher.status === 'rejected') return { success: false, error: 'Your registration was rejected by admin.' };
-    setCurrentUser(teacher);
-    return { success: true, user: teacher };
+    
+    // 2. Check local state first
+    let user = users.find(u => u.username === username && u.password === password);
+    
+    // 3. Robust Login: If not found, try re-fetching from API (prevents issues with stale state)
+    if (!user) {
+      try {
+        const freshUsers = await api.users.getAll();
+        setUsers(freshUsers);
+        user = freshUsers.find(u => u.username === username && u.password === password);
+      } catch (err) {
+        console.error('Robust login fetch failed:', err);
+      }
+    }
+
+    if (!user) return { success: false, error: 'Invalid credentials.' };
+    
+    // For teachers, check status
+    if (user.role === 'teacher') {
+      if (user.status === 'pending') return { success: false, error: 'pending', user };
+      if (user.status === 'rejected') return { success: false, error: 'Your registration was rejected by admin.' };
+    }
+    
+    setCurrentUser(user);
+    return { success: true, user };
   }
 
   async function register(data) {
-    if (data.username === ADMIN_CREDENTIALS.username) return { success: false, error: 'Username not available.' };
+    if (data.username === SUPER_ADMIN_CREDENTIALS.username) return { success: false, error: 'Username not available.' };
     if (users.find(u => u.username === data.username)) return { success: false, error: 'Username already exists.' };
     
     const newUser = {
-      id: 'teacher_' + Date.now(),
+      id: 'user_' + Date.now(),
       role: 'teacher',
       status: 'pending',
       name: data.name,
@@ -67,13 +90,49 @@ export function AuthProvider({ children }) {
       phone: data.phone || '',
       subjects: [],
       classes: [],
+      assignedClasses: [],
       createdAt: new Date().toISOString(),
     };
 
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    await api.users.create(newUser);
-    return { success: true, user: newUser };
+    try {
+      await api.users.create(newUser);
+      const freshUsers = await api.users.getAll();
+      setUsers(freshUsers);
+      return { success: true, user: newUser };
+    } catch (err) {
+      return { success: false, error: 'Failed to save account. Please try again.' };
+    }
+  }
+
+  // Super Admin only: Create a new account with a specific role
+  async function createUserAccount(data) {
+    if (data.username === SUPER_ADMIN_CREDENTIALS.username) return { success: false, error: 'Username not available.' };
+    if (users.find(u => u.username === data.username)) return { success: false, error: 'Username already exists.' };
+
+    const newUser = {
+      id: 'user_' + Date.now(),
+      role: data.role || 'teacher',
+      status: data.role === 'admin' ? 'approved' : 'pending',
+      name: data.name,
+      username: data.username,
+      password: data.password,
+      email: data.email || '',
+      phone: data.phone || '',
+      subjects: data.subjects || [],
+      classes: data.classes || [],
+      assignedClasses: data.assignedClasses || [],
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      await api.users.create(newUser);
+      const freshUsers = await api.users.getAll();
+      setUsers(freshUsers);
+      return { success: true, user: newUser };
+    } catch (err) {
+      console.error('Failed to create user account:', err);
+      return { success: false, error: err.message || 'Failed to create user account.' };
+    }
   }
 
   async function approveUser(userId) {
@@ -94,13 +153,21 @@ export function AuthProvider({ children }) {
     await api.users.delete(userId);
   }
 
-  async function updateTeacher(teacherId, updates) {
-    const updatedUsers = users.map(u => u.id === teacherId ? { ...u, ...updates } : u);
-    setUsers(updatedUsers);
-    await api.users.update(teacherId, updates);
-    
-    if (currentUser?.id === teacherId) {
-      setCurrentUser(prev => ({ ...prev, ...updates }));
+  async function updateUser(userId, updates) {
+    try {
+      await api.users.update(userId, updates);
+      // Re-fetch everything to ensure all browsers/sessions are in sync with the DB truth
+      const freshUsers = await api.users.getAll();
+      setUsers(freshUsers);
+      
+      if (currentUser?.id === userId) {
+        const updatedSelf = freshUsers.find(u => u.id === userId);
+        if (updatedSelf) setCurrentUser(updatedSelf);
+      }
+      return { success: true };
+    } catch (err) {
+      console.error('Failed to update user:', err);
+      throw err;
     }
   }
 
@@ -116,11 +183,15 @@ export function AuthProvider({ children }) {
     return users.filter(u => u.role === 'teacher');
   }
 
+  function getAllAdmins() {
+    return users.filter(u => u.role === 'admin');
+  }
+
   return (
     <AuthContext.Provider value={{
       currentUser, users, loading, login, register, logout,
-      approveUser, rejectUser, deleteUser, updateTeacher,
-      getApprovedTeachers, getAllTeachers,
+      approveUser, rejectUser, deleteUser, updateUser, createUserAccount,
+      getApprovedTeachers, getAllTeachers, getAllAdmins,
     }}>
       {children}
     </AuthContext.Provider>
@@ -130,3 +201,4 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
+

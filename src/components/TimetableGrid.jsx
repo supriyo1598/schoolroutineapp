@@ -108,8 +108,11 @@ export default function TimetableGrid({ selectedClass, selectedSection }) {
       return;
     }
 
+    const cls = classes.find(c => c.id === selectedClass);
+    const className = cls?.name || selectedClass;
+    
     placeSlot(scheduleKey, day, periodId, teacherId, subject || '—');
-    showToast(`${teacherName} assigned to ${selectedClass} - ${selectedSection}`, 'success');
+    showToast(`${teacherName} assigned to ${className} - ${selectedSection}`, 'success');
   }, [schedule, placeSlot, showToast, scheduleKey, selectedClass, selectedSection, teachers, classes]);
 
   const handleRemove = useCallback((classId, day, periodId, teacherId) => {

@@ -50,7 +50,17 @@ const api = {
       if (isSupabaseConfigured) {
         try {
           const data = await sbRequest('users?select=*');
-          if (data && data.length > 0) return data;
+          if (data) {
+            // Map snake_case from DB back to camelCase for app state
+            const mapped = data.map(u => ({
+              ...u,
+              assignedClasses: u.assigned_classes || [],
+              createdAt: u.created_at
+            }));
+            // Update local cache with latest from server
+            localStorage.setItem('srs_users', JSON.stringify(mapped));
+            return mapped;
+          }
         } catch (err) {
           console.error('Supabase user fetch failed, falling back to local:', err);
         }
@@ -61,10 +71,24 @@ const api = {
       localStorage.setItem('srs_users', JSON.stringify(users));
       if (isSupabaseConfigured) {
         try {
+          const mappedUsers = users.map(u => ({
+            id: u.id,
+            role: u.role,
+            status: u.status,
+            name: u.name,
+            username: u.username,
+            password: u.password,
+            email: u.email,
+            phone: u.phone,
+            subjects: u.subjects,
+            classes: u.classes,
+            assigned_classes: u.assignedClasses || [],
+            created_at: u.createdAt
+          }));
           await sbRequest('users?on_conflict=id', {
             method: 'POST',
             headers: { 'Prefer': 'resolution=merge-duplicates' },
-            body: JSON.stringify(users),
+            body: JSON.stringify(mappedUsers),
           });
         } catch (err) {
           console.error('Supabase users sync failed:', err);
@@ -72,36 +96,52 @@ const api = {
       }
     },
     async create(user) {
-      // Optimistic local update
-      const users = await this.getAll();
-      localStorage.setItem('srs_users', JSON.stringify([...users, user]));
+      // Always use current local state for optimistic update
+      const existing = await this.getAll();
+      localStorage.setItem('srs_users', JSON.stringify([...existing, user]));
 
       if (isSupabaseConfigured) {
-        try {
-          return await sbRequest('users', {
-            method: 'POST',
-            body: JSON.stringify(user),
-          });
-        } catch (err) {
-          console.error('Supabase user creation failed:', err);
-          // We don't throw here so the app continues with local data
-        }
+        const mappedUser = {
+          id: user.id,
+          role: user.role,
+          status: user.status,
+          name: user.name,
+          username: user.username,
+          password: user.password,
+          email: user.email,
+          phone: user.phone,
+          subjects: user.subjects,
+          classes: user.classes,
+          assigned_classes: user.assignedClasses || [],
+          created_at: user.createdAt
+        };
+        // Throw error if DB create fails
+        return await sbRequest('users', {
+          method: 'POST',
+          body: JSON.stringify(mappedUser)
+        });
       }
     },
     async update(id, updates) {
-       const users = await this.getAll();
-       const updated = users.map(u => u.id === id ? { ...u, ...updates } : u);
+       const existing = await this.getAll();
+       const updated = existing.map(u => u.id === id ? { ...u, ...updates } : u);
        localStorage.setItem('srs_users', JSON.stringify(updated));
 
        if (isSupabaseConfigured) {
-         try {
-           return await sbRequest(`users?id=eq.${id}`, {
-             method: 'PATCH',
-             body: JSON.stringify(updates),
-           });
-         } catch (err) {
-           console.error('Supabase user update failed:', err);
+         const mappedUpdates = { ...updates };
+         if (updates.assignedClasses) {
+           mappedUpdates.assigned_classes = updates.assignedClasses;
+           delete mappedUpdates.assignedClasses;
          }
+         if (updates.createdAt) {
+           mappedUpdates.created_at = updates.createdAt;
+           delete mappedUpdates.createdAt;
+         }
+         // Throw error if DB update fails
+         return await sbRequest(`users?id=eq.${id}`, {
+           method: 'PATCH',
+           body: JSON.stringify(mappedUpdates)
+         });
        }
     },
     async delete(id) {

@@ -6,7 +6,7 @@ import { useNotification } from '../context/NotificationContext';
 import { findSubstitutes } from '../utils/substitutionEngine';
 
 export default function SubstitutionPanel() {
-  const { schedule, periods, classes, markAbsent, markPresent, assignSubstitute, removeSubstitute, isTeacherAbsent, substitutions } = useSchedule();
+  const { schedule, periods, classes, filteredClasses, markAbsent, markPresent, assignSubstitute, removeSubstitute, isTeacherAbsent, substitutions } = useSchedule();
   const { getApprovedTeachers } = useAuth();
   const { showToast, addNotification } = useNotification();
 
@@ -16,7 +16,9 @@ export default function SubstitutionPanel() {
   const [overrides, setOverrides] = useState({});
 
   const teachers = getApprovedTeachers();
+  const displayClasses = filteredClasses.length > 0 ? filteredClasses : classes;
   const absentOnDay = teachers.filter(t => isTeacherAbsent(t.id, selectedDay));
+
 
   async function handleMarkAbsent() {
     if (!selectedTeacher) return;
@@ -41,8 +43,14 @@ export default function SubstitutionPanel() {
   async function handleAssignSub(slot, substituteId) {
     if (!substituteId) return;
     const sub = teachers.find(t => t.id === substituteId);
+    const cls = classes.find(c => c.id === slot.classId);
+    const className = cls?.name || slot.classId;
+    
     await assignSubstitute(slot.classId, slot.day, slot.periodId, substituteId, slot.currentTeacherId);
-    await addNotification(substituteId, `You have been assigned as substitute for ${slot.classId} - ${slot.day} - ${slot.subject} (${slot.periodId}).`);
+    await addNotification(
+      substituteId, 
+      `You have been assigned as substitute for ${className} ${slot.section || ''} - ${slot.day} - ${slot.subject} (${slot.periodId}).`
+    );
     showToast(`${sub?.name} assigned as substitute. Teacher notified.`, 'success');
   }
 

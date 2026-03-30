@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import api from '../services/api';
 import { useSchedule } from '../context/ScheduleContext';
 import { DAYS } from '../utils/constants';
 import { useNotification } from '../context/NotificationContext';
@@ -11,15 +10,14 @@ import SubstitutionPanel from '../components/SubstitutionPanel';
 import { exportClassTimetablePDF, exportAllClassesPDF } from '../utils/exportUtils';
 
 const TABS = [
-  { id: 'timetable', label: '📅 Timetable', icon: '📅' },
-  { id: 'teachers', label: '👩‍🏫 Teachers', icon: '👩‍🏫' },
-  { id: 'classes', label: '🏫 Classes', icon: '🏫' },
-  { id: 'periods', label: '⏰ Periods', icon: '⏰' },
-  { id: 'substitutions', label: '🔄 Substitutions', icon: '🔄' },
-  { id: 'users', label: '👥 Users', icon: '👥' },
-  { id: 'notifications', label: '🔔 Broadcast', icon: '🔔' },
-  { id: 'leaves', label: '🌴 Leave Requests', icon: '🌴' },
-  { id: 'supabase', label: '☁️ Cloud Sync', icon: '☁️' },
+  { id: 'timetable', label: '📅 Timetable', icon: '📅', roles: ['super_admin', 'admin'] },
+  { id: 'teachers', label: '👩‍🏫 Teachers', icon: '👩‍🏫', roles: ['super_admin', 'admin'] },
+  { id: 'classes', label: '🏫 Classes & Subjects', icon: '🏫', roles: ['super_admin', 'admin'] },
+  { id: 'periods', label: '⏰ Periods', icon: '⏰', roles: ['super_admin'] },
+  { id: 'substitutions', label: '🔄 Substitutions', icon: '🔄', roles: ['super_admin', 'admin'] },
+  { id: 'users', label: '👥 User Management', icon: '👥', roles: ['super_admin'] },
+  { id: 'notifications', label: '🔔 Broadcast', icon: '🔔', roles: ['super_admin', 'admin'] },
+  { id: 'leaves', label: '🌴 Leave Requests', icon: '🌴', roles: ['super_admin', 'admin'] },
 ];
 
 // ===== Teachers Tab =====
@@ -125,7 +123,6 @@ function TeachersTab() {
         </div>
       )}
 
-
       {showForm && editingId && (
         <div className="modal-overlay">
           <div className="modal">
@@ -229,6 +226,7 @@ function TeachersTab() {
 // ===== Classes Tab =====
 function ClassesTab() {
   const { classes, subjects, dispatch } = useSchedule();
+  const { currentUser } = useAuth();
   const { showToast } = useNotification();
   const [newClass, setNewClass] = useState('');
   const [addingSubject, setAddingSubject] = useState('');
@@ -269,33 +267,35 @@ function ClassesTab() {
         <h2>Class & Subject Configuration</h2>
         <p className="tab-desc">Manage Grade I–XII classes and define available subjects.</p>
       </div>
-      <div className="two-col-grid">
-        <div className="section-card">
-          <h3>Classes</h3>
-          <div className="input-row">
-            <input value={newClass} onChange={e => setNewClass(e.target.value)} placeholder="e.g. Grade XI Science" />
-            <button className="btn-primary" onClick={addClass}>Add Class</button>
-          </div>
-          <div className="list-items">
-            {classes.map(c => (
-              <div key={c.id} className="list-item class-management-item">
-                <div className="class-main-info">
-                  <span className="class-name-label">{c.name}</span>
-                  <div className="section-editor">
-                    <span className="tiny-label">Sections:</span>
-                    <input 
-                      className="section-csv-input"
-                      value={c.sections?.join(', ') || ''} 
-                      onChange={e => updateSections(c.id, e.target.value)}
-                      placeholder="A, B, C"
-                    />
+      <div className={currentUser.role === 'super_admin' ? "two-col-grid" : ""}>
+        {currentUser.role === 'super_admin' && (
+          <div className="section-card">
+            <h3>Classes</h3>
+            <div className="input-row">
+              <input value={newClass} onChange={e => setNewClass(e.target.value)} placeholder="e.g. Grade XI Science" />
+              <button className="btn-primary" onClick={addClass}>Add Class</button>
+            </div>
+            <div className="list-items">
+              {classes.map(c => (
+                <div key={c.id} className="list-item class-management-item">
+                  <div className="class-main-info">
+                    <span className="class-name-label">{c.name}</span>
+                    <div className="section-editor">
+                      <span className="tiny-label">Sections:</span>
+                      <input 
+                        className="section-csv-input"
+                        value={c.sections?.join(', ') || ''} 
+                        onChange={e => updateSections(c.id, e.target.value)}
+                        placeholder="A, B, C"
+                      />
+                    </div>
                   </div>
+                  <button className="btn-danger-sm" onClick={() => deleteClass(c.id)}>Remove</button>
                 </div>
-                <button className="btn-danger-sm" onClick={() => deleteClass(c.id)}>Remove</button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         <div className="section-card">
           <h3>Subjects</h3>
           <div className="input-row">
@@ -368,13 +368,89 @@ function PeriodsTab() {
   );
 }
 
-// ===== Users Tab =====
+// ===== Users Tab (Super Admin Only) =====
 function UsersTab() {
-  const { getAllTeachers, approveUser, rejectUser, deleteUser } = useAuth();
+  const { users, approveUser, rejectUser, deleteUser, createUserAccount, updateUser } = useAuth();
+  const { classes } = useSchedule();
   const { showToast } = useNotification();
-  const teachers = getAllTeachers();
+  
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ 
+    name: '', username: '', password: '', role: 'teacher', email: '', phone: '', assignedClasses: [] 
+  });
 
-  const pending = teachers.filter(t => t.status === 'pending');
+  const pending = users.filter(t => t.status === 'pending');
+  const admins = users.filter(u => u.role === 'admin');
+  const teachers = users.filter(u => u.role === 'teacher' && u.status !== 'pending');
+
+  async function handleCreate() {
+    if (!form.name || !form.username || !form.password) {
+      showToast('Please fill required fields.', 'warning');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await createUserAccount(form);
+      if (res.success) {
+        showToast(`${form.role === 'admin' ? 'Admin' : 'Teacher'} created successfully in database.`, 'success');
+        setShowAddModal(false);
+        resetForm();
+      } else {
+        showToast(res.error, 'error');
+      }
+    } catch (err) {
+      showToast('DB Error: Failed to create user. Please check your connection.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleUpdate() {
+    if (!editingUser) return;
+    setLoading(true);
+    try {
+      await updateUser(editingUser.id, { 
+        name: form.name, 
+        email: form.email, 
+        phone: form.phone, 
+        assignedClasses: form.assignedClasses 
+      });
+      showToast('User updated globally.', 'success');
+      setEditingUser(null);
+      resetForm();
+    } catch (err) {
+      showToast('DB Error: Failed to update user.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function resetForm() {
+    setForm({ name: '', username: '', password: '', role: 'teacher', email: '', phone: '', assignedClasses: [] });
+  }
+
+  function openEdit(user) {
+    setEditingUser(user);
+    setForm({ 
+      name: user.name, 
+      username: user.username, 
+      role: user.role, 
+      email: user.email || '', 
+      phone: user.phone || '', 
+      assignedClasses: user.assignedClasses || [] 
+    });
+  }
+
+  function toggleClass(id) {
+    setForm(p => ({
+      ...p,
+      assignedClasses: p.assignedClasses.includes(id) 
+        ? p.assignedClasses.filter(x => x !== id)
+        : [...p.assignedClasses, id]
+    }));
+  }
 
   function StatusBadge({ status }) {
     const cls = { pending: 'badge-pending', approved: 'badge-approved', rejected: 'badge-rejected' }[status] || '';
@@ -385,26 +461,99 @@ function UsersTab() {
     <div className="tab-content">
       <div className="tab-header">
         <h2>User Management</h2>
-        <p className="tab-desc">Review teacher registration requests and manage access.</p>
+        <div className="action-btns">
+          <button className="btn-primary" onClick={() => setShowAddModal(true)}>+ Add User</button>
+        </div>
       </div>
 
+      {(showAddModal || editingUser) && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h3>{editingUser ? 'Edit User' : 'Add New User'}</h3>
+              <button className="modal-close" onClick={() => { setShowAddModal(false); setEditingUser(null); resetForm(); }}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Full Name *</label>
+                <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="John Doe" />
+              </div>
+              {!editingUser && (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Username *</label>
+                    <input value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} placeholder="johndoe" />
+                  </div>
+                  <div className="form-group">
+                    <label>Password *</label>
+                    <input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="••••••••" />
+                  </div>
+                </div>
+              )}
+              {!editingUser && (
+                <div className="form-group">
+                  <label>Role</label>
+                  <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}>
+                    <option value="teacher">Teacher</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+              )}
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Email</label>
+                  <input value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="john@example.com" />
+                </div>
+                <div className="form-group">
+                  <label>Phone</label>
+                  <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+1234567890" />
+                </div>
+              </div>
+
+              {form.role === 'admin' && (
+                <div className="form-group">
+                  <label>Assign Classes (Restricts logic for this admin)</label>
+                  <div className="chip-grid">
+                    {classes.map(c => (
+                      <button 
+                        key={c.id} 
+                        className={`chip-toggle ${form.assignedClasses.includes(c.id) ? 'active' : ''}`}
+                        onClick={() => toggleClass(c.id)}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-dim text-xs mt-1">If no classes are selected, the admin will have no access to classes.</p>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-ghost" onClick={() => { setShowAddModal(false); setEditingUser(null); resetForm(); }} disabled={loading}>Cancel</button>
+              <button className="btn-primary" onClick={editingUser ? handleUpdate : handleCreate} disabled={loading}>
+                {loading ? 'Saving...' : (editingUser ? 'Save Changes' : 'Create User')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pending.length > 0 && (
-        <div className="pending-section">
-          <h3 className="section-label pending-heading">⏳ Pending Approval ({pending.length})</h3>
+        <div className="section-card mb-4">
+          <h3>⏳ Pending Approval ({pending.length})</h3>
           <div className="user-cards">
             {pending.map(t => (
-              <div key={t.id} className="user-card pending-card-item">
+              <div key={t.id} className="user-card">
                 <div className="user-card-info">
                   <div className="user-avatar">{t.name[0]}</div>
                   <div>
                     <strong>{t.name}</strong>
-                    <div><code>{t.username}</code> · {t.email}</div>
-                    <div className="user-date">{new Date(t.createdAt).toLocaleDateString()}</div>
+                    <div className="text-xs text-dim">{t.username} · {t.email || 'No email'}</div>
                   </div>
                 </div>
                 <div className="user-card-actions">
-                  <button className="btn-approve" onClick={async () => { await approveUser(t.id); showToast(`${t.name} approved!`, 'success'); }}>✓ Approve</button>
-                  <button className="btn-reject" onClick={async () => { await rejectUser(t.id); showToast(`${t.name} rejected.`, 'info'); }}>✕ Reject</button>
+                  <button className="btn-approve-sm" onClick={() => approveUser(t.id)}>Approve</button>
+                  <button className="btn-reject-sm" onClick={() => rejectUser(t.id)}>Reject</button>
                 </div>
               </div>
             ))}
@@ -412,30 +561,61 @@ function UsersTab() {
         </div>
       )}
 
-      <h3 className="section-label">All Teachers</h3>
-      <div className="table-container">
-        <table className="data-table">
-          <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Status</th><th>Registered</th><th>Actions</th></tr></thead>
-          <tbody>
-            {teachers.length === 0 && <tr><td colSpan={6} className="empty-row">No teacher registrations yet.</td></tr>}
-            {teachers.map(t => (
-              <tr key={t.id}>
-                <td><strong>{t.name}</strong></td>
-                <td><code>{t.username}</code></td>
-                <td>{t.email || '—'}</td>
-                <td><StatusBadge status={t.status} /></td>
-                <td>{new Date(t.createdAt).toLocaleDateString()}</td>
-                <td>
-                  <div className="action-btns">
-                    {t.status !== 'approved' && <button className="btn-approve-sm" onClick={async () => { await approveUser(t.id); showToast('Approved!', 'success'); }}>Approve</button>}
-                    {t.status !== 'rejected' && <button className="btn-reject-sm" onClick={async () => { await rejectUser(t.id); showToast('Rejected.', 'info'); }}>Reject</button>}
-                    <button className="btn-danger-sm" onClick={async () => { await deleteUser(t.id); showToast('Deleted.', 'info'); }}>Delete</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="two-col-grid">
+        <div className="section-card">
+          <h3>Administrators</h3>
+          <div className="table-container">
+            <table className="data-table">
+              <thead><tr><th>Name</th><th>Assignments</th><th>Actions</th></tr></thead>
+              <tbody>
+                {admins.length === 0 && <tr><td colSpan={3} className="empty-row">No admins added.</td></tr>}
+                {admins.map(u => (
+                  <tr key={u.id}>
+                    <td><strong>{u.name}</strong><br/><code className="text-xs">{u.username}</code></td>
+                    <td>
+                      <div className="tag-list">
+                        {(u.assignedClasses || []).map(cId => (
+                          <span key={cId} className="tag tag-blue">{classes.find(c => c.id === cId)?.name || 'Unknown'}</span>
+                        ))}
+                        {(!u.assignedClasses || u.assignedClasses.length === 0) && <span className="tag-none">None</span>}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="action-btns">
+                        <button className="btn-edit" onClick={() => openEdit(u)}>Edit</button>
+                        <button className="btn-danger-sm" onClick={() => deleteUser(u.id)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="section-card">
+          <h3>Approved Teachers</h3>
+          <div className="table-container">
+            <table className="data-table">
+              <thead><tr><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {teachers.length === 0 && <tr><td colSpan={3} className="empty-row">No teachers yet.</td></tr>}
+                {teachers.map(u => (
+                  <tr key={u.id}>
+                    <td><strong>{u.name}</strong><br/><code className="text-xs">{u.username}</code></td>
+                    <td><StatusBadge status={u.status} /></td>
+                    <td>
+                      <div className="action-btns">
+                        <button className="btn-edit" onClick={() => openEdit(u)}>Edit</button>
+                        <button className="btn-danger-sm" onClick={() => deleteUser(u.id)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -443,22 +623,19 @@ function UsersTab() {
 
 // ===== Timetable Tab =====
 function TimetableTab() {
-  const { classes, schedule, periods, subjects, substitutions, absentTeachers } = useSchedule();
-  const { getApprovedTeachers, users } = useAuth();
+  const { classes, filteredClasses, schedule, periods, saveSchedule, syncStatus } = useSchedule();
+  const { getApprovedTeachers } = useAuth();
   const { showToast } = useNotification();
-  const [selectedClass, setSelectedClass] = useState(classes[0]?.id || '');
+  
+  const displayClasses = filteredClasses.length > 0 ? filteredClasses : classes;
+  
+  const [selectedClass, setSelectedClass] = useState(displayClasses[0]?.id || '');
   const [selectedSection, setSelectedSection] = useState('A');
-  const [saving, setSaving] = useState(false);
   const teachers = getApprovedTeachers();
 
-  const cls = classes.find(c => c.id === selectedClass);
+  const cls = displayClasses.find(c => c.id === selectedClass);
   const sections = useMemo(() => cls?.sections || ['A'], [cls]);
-
-  // Ensure we use a valid section even if state is temporarily out of sync
-  const activeSection = useMemo(() =>
-    sections.includes(selectedSection) ? selectedSection : sections[0]
-  , [sections, selectedSection]);
-
+  const activeSection = useMemo(() => sections.includes(selectedSection) ? selectedSection : sections[0], [sections, selectedSection]);
   const scheduleKey = `${selectedClass}__${activeSection}`;
 
   function handleExportSection() {
@@ -466,31 +643,25 @@ function TimetableTab() {
       exportClassTimetablePDF(cls?.name || selectedClass, activeSection, schedule[scheduleKey] || {}, teachers, periods.filter(p => !p.isBreak));
       showToast('Export successful!', 'success');
     } catch (err) {
-      console.error(err);
       showToast('Export failed: ' + err.message, 'error');
     }
   }
 
   function handleExportAll() {
     try {
-      exportAllClassesPDF(classes, schedule, teachers, periods.filter(p => !p.isBreak));
+      exportAllClassesPDF(displayClasses, schedule, teachers, periods.filter(p => !p.isBreak));
       showToast('Export successful!', 'success');
     } catch (err) {
-      console.error(err);
       showToast('Export failed: ' + err.message, 'error');
     }
   }
 
-  async function handleFinishSave() {
-    setSaving(true);
-    try {
-      await api.users.saveAll(users);
-      await api.schedule.save({ classes, periods, subjects, schedule, substitutions, absentTeachers });
-      showToast('✅ Routine saved to server successfully!', 'success');
-    } catch (err) {
-      showToast('❌ Save failed: ' + err.message, 'error');
-    } finally {
-      setSaving(false);
+  async function handleManualSave() {
+    const res = await saveSchedule();
+    if (res.success) {
+      showToast('All changes saved and synchronized successfully!', 'success');
+    } else {
+      showToast('Sync error: ' + res.error, 'error');
     }
   }
 
@@ -503,101 +674,23 @@ function TimetableTab() {
         </div>
         <div className="timetable-controls">
           <select className="class-select" value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
-            {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {displayClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <select className="section-select" value={activeSection} onChange={e => setSelectedSection(e.target.value)}>
             {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
           </select>
-          <button className="btn-outline" onClick={handleExportSection}>
-            📄 Export Section PDF
-          </button>
-          <button className="btn-outline" onClick={handleExportAll}>
-            📄 Export All
-          </button>
-          <button
-            className={`btn-primary finish-save-btn ${saving ? 'btn-loading' : ''}`}
-            onClick={handleFinishSave}
-            disabled={saving}
-            title="Save all routine data to the server"
+          <button 
+            className={`btn-primary ${syncStatus === 'saving' ? 'loading' : ''}`} 
+            onClick={handleManualSave}
+            disabled={syncStatus === 'saving'}
           >
-            {saving ? '⏳ Saving...' : '✅ Finish & Save'}
+            {syncStatus === 'saving' ? '⏳ Saving...' : '💾 Save & Finish'}
           </button>
+          <button className="btn-outline" onClick={handleExportSection}>📄 Export Section PDF</button>
+          <button className="btn-outline" onClick={handleExportAll}>📄 Export All</button>
         </div>
       </div>
       {selectedClass && <TimetableGrid selectedClass={selectedClass} selectedSection={activeSection} />}
-    </div>
-  );
-}
-
-// ===== Supabase Tab =====
-function SupabaseTab() {
-  const { users } = useAuth();
-  const scheduleContext = useSchedule();
-  const { showToast } = useNotification();
-  const [syncing, setSyncing] = useState(false);
-
-  const isConfigured = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
-
-  async function handleSync() {
-    if (!isConfigured) {
-      showToast('Supabase not configured in .env', 'error');
-      return;
-    }
-    setSyncing(true);
-    try {
-      // Sync Users
-      await api.users.saveAll(users);
-      
-      // Sync Full Schedule State
-      const { 
-        classes, periods, subjects, schedule, substitutions, absentTeachers 
-      } = scheduleContext;
-      
-      await api.schedule.save({ 
-        classes, periods, subjects, schedule, substitutions, absentTeachers 
-      });
-      
-      showToast('Global data synced successfully!', 'success');
-    } catch (err) {
-      showToast('Sync failed: ' + err.message, 'error');
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  return (
-    <div className="tab-content">
-      <div className="tab-header">
-        <h2>Cloud Configuration</h2>
-        <p className="tab-desc">Manage your Supabase connection and synchronize local data.</p>
-      </div>
-      <div className="section-card" style={{ maxWidth: '600px' }}>
-        <div className="supabase-status">
-          <div className={`status-pill ${isConfigured ? 'pill-success' : 'pill-error'}`}>
-            {isConfigured ? '🟢 Connected to Supabase' : '🔴 Connection Missing'}
-          </div>
-          <p className="mt-4 text-sm text-dim">
-            {isConfigured 
-              ? 'Your application is correctly configured to use global storage. Any new data you save will be stored in your Supabase database.'
-              : 'Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file to enable global storage.'
-            }
-          </p>
-          {isConfigured && (
-            <p className="mt-2 text-sm text-dim">
-              If you have existing data in this browser, use the button below to migrate it to the cloud now.
-            </p>
-          )}
-        </div>
-        <div className="mt-4">
-          <button 
-            className={`btn-primary ${syncing ? 'btn-loading' : ''}`} 
-            onClick={handleSync}
-            disabled={syncing || !isConfigured}
-          >
-            {syncing ? 'Syncing...' : '🔄 Sync Local Data to Cloud'}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -616,9 +709,8 @@ export default function AdminPanel() {
     periods: <PeriodsTab />,
     substitutions: <SubstitutionPanel />,
     users: <UsersTab />,
-    notifications: <NotificationsTab />, // Added NotificationsTab
-    leaves: <LeavesTab />, // Added LeavesTab
-    supabase: <SupabaseTab />,
+    notifications: <NotificationsTab />,
+    leaves: <LeavesTab />,
   };
 
   return (
@@ -640,7 +732,7 @@ export default function AdminPanel() {
           </div>
         </div>
         <nav className="sidebar-nav">
-          {TABS.map(tab => (
+          {TABS.filter(t => t.roles.includes(currentUser?.role)).map(tab => (
             <button
               key={tab.id}
               className={`nav-item ${activeTab === tab.id ? 'active' : ''}`}
@@ -658,10 +750,10 @@ export default function AdminPanel() {
         </nav>
         <div className="sidebar-footer">
           <div className="user-info">
-            <div className="user-avatar-sm">A</div>
+            <div className="user-avatar-sm">{currentUser?.name?.[0] || 'A'}</div>
             <div>
               <div className="user-name">{currentUser?.name}</div>
-              <div className="user-role-label">Administrator</div>
+              <div className="user-role-label">{currentUser?.role === 'super_admin' ? 'Super Admin' : 'Administrator'}</div>
             </div>
           </div>
           <button className="btn-logout" onClick={logout}>Sign Out</button>
@@ -673,6 +765,7 @@ export default function AdminPanel() {
     </div>
   );
 }
+
 // ===== Leaves Tab =====
 function LeavesTab() {
   const { schedule, markAbsent, substitutions } = useSchedule();
@@ -760,7 +853,7 @@ function LeavesTab() {
                 </div>
                 <p className="leave-reason">"{l.reason}"</p>
                 {l.document_link && (
-                  <div style={{ margin: '0.5rem 0', padding: '0.5rem', background: 'var(--bg-app)', borderRadius: '4px' }}>
+                  <div style={{ margin: '0.5rem 0', padding: '0.4rem', background: 'var(--bg-app)', borderRadius: '4px' }}>
                     <a href={l.document_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.875rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       📄 View Supported Document
                     </a>
