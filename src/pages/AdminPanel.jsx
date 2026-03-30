@@ -606,6 +606,7 @@ function SupabaseTab() {
 export default function AdminPanel() {
   const { currentUser, logout } = useAuth();
   const { leaves } = useLeave();
+  const { syncStatus } = useSchedule();
   const [activeTab, setActiveTab] = useState('timetable');
 
   const tabContent = {
@@ -625,9 +626,17 @@ export default function AdminPanel() {
       <aside className="app-sidebar">
         <div className="sidebar-brand">
           <span className="brand-icon">📚</span>
-          <div>
+          <div className="brand-info">
             <div className="brand-name">SchoolRoutine</div>
-            <div className="brand-role">Admin Panel</div>
+            <div className="brand-role">
+              Admin Panel
+              <div className={`sync-indicator ${syncStatus}`}>
+                {syncStatus === 'saving' && <span className="sync-dot saving"></span>}
+                {syncStatus === 'synced' && <span className="sync-dot synced"></span>}
+                {syncStatus === 'error' && <span className="sync-dot error"></span>}
+                {syncStatus === 'saving' ? 'Saving...' : syncStatus === 'error' ? 'Sync Error' : 'Cloud Synced'}
+              </div>
+            </div>
           </div>
         </div>
         <nav className="sidebar-nav">

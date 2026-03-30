@@ -58,6 +58,7 @@ const api = {
       return JSON.parse(localStorage.getItem('srs_users') || '[]');
     },
     async saveAll(users) {
+      localStorage.setItem('srs_users', JSON.stringify(users));
       if (isSupabaseConfigured) {
         try {
           await sbRequest('users?on_conflict=id', {
@@ -69,9 +70,12 @@ const api = {
           console.error('Supabase users sync failed:', err);
         }
       }
-      localStorage.setItem('srs_users', JSON.stringify(users));
     },
     async create(user) {
+      // Optimistic local update
+      const users = await this.getAll();
+      localStorage.setItem('srs_users', JSON.stringify([...users, user]));
+
       if (isSupabaseConfigured) {
         try {
           return await sbRequest('users', {
@@ -80,13 +84,15 @@ const api = {
           });
         } catch (err) {
           console.error('Supabase user creation failed:', err);
-          throw err;
+          // We don't throw here so the app continues with local data
         }
       }
-      const users = await this.getAll();
-      localStorage.setItem('srs_users', JSON.stringify([...users, user]));
     },
     async update(id, updates) {
+       const users = await this.getAll();
+       const updated = users.map(u => u.id === id ? { ...u, ...updates } : u);
+       localStorage.setItem('srs_users', JSON.stringify(updated));
+
        if (isSupabaseConfigured) {
          try {
            return await sbRequest(`users?id=eq.${id}`, {
@@ -97,11 +103,11 @@ const api = {
            console.error('Supabase user update failed:', err);
          }
        }
-       const users = await this.getAll();
-       const updated = users.map(u => u.id === id ? { ...u, ...updates } : u);
-       localStorage.setItem('srs_users', JSON.stringify(updated));
     },
     async delete(id) {
+       const users = await this.getAll();
+       localStorage.setItem('srs_users', JSON.stringify(users.filter(u => u.id !== id)));
+
        if (isSupabaseConfigured) {
          try {
            return await sbRequest(`users?id=eq.${id}`, { method: 'DELETE' });
@@ -109,8 +115,6 @@ const api = {
            console.error('Supabase user deletion failed:', err);
          }
        }
-       const users = await this.getAll();
-       localStorage.setItem('srs_users', JSON.stringify(users.filter(u => u.id !== id)));
     }
   },
 
@@ -128,6 +132,9 @@ const api = {
       return JSON.parse(localStorage.getItem('srs_schedule_data') || 'null');
     },
     async save(data) {
+      // Immediate local save
+      localStorage.setItem('srs_schedule_data', JSON.stringify(data));
+
       if (isSupabaseConfigured) {
         try {
           await sbRequest('app_state?on_conflict=key', {
@@ -137,10 +144,9 @@ const api = {
           });
         } catch (err) {
           console.error('Supabase schedule save failed:', err);
-          throw err;
+          throw err; // Still throw for ScheduleContext to catch and show error status
         }
       }
-      localStorage.setItem('srs_schedule_data', JSON.stringify(data));
     }
   },
 

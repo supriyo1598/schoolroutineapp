@@ -6,6 +6,7 @@ import { DAYS } from './constants';
 export function exportClassTimetablePDF(className, section, schedule, teachers, periods) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const fullTitle = section ? `${className} - Section ${section}` : className;
+  const activePeriods = periods.filter(p => !p.isBreak);
 
   // Title
   doc.setFont('helvetica', 'bold');
@@ -18,13 +19,12 @@ export function exportClassTimetablePDF(className, section, schedule, teachers, 
   doc.setTextColor(100, 116, 139);
   doc.text(`Generated: ${new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, 148.5, 22, { align: 'center' });
 
-  const head = [['Period / Time', ...DAYS]];
+  // Days = rows, Periods = columns
+  const head = [['Day', ...activePeriods.map(p => `${p.label}\n${p.time || ''}`)]];
 
-  // Find the internal key (which might be name__section or just name)
-  // But usually we pass the already filtered schedule for this specific class/section
-  const body = periods.map(period => {
-    const row = [`${period.label}\n${period.time || ''}`];
-    for (const day of DAYS) {
+  const body = DAYS.map(day => {
+    const row = [day];
+    for (const period of activePeriods) {
       const slot = schedule?.[day]?.[period.id];
       if (slot) {
         const assignments = Array.isArray(slot) ? slot : [slot];
@@ -58,13 +58,13 @@ export function exportClassTimetablePDF(className, section, schedule, teachers, 
       fillColor: [15, 23, 42],
       textColor: [248, 250, 252],
       fontStyle: 'bold',
-      fontSize: 10,
+      fontSize: 9,
     },
     alternateRowStyles: {
       fillColor: [241, 245, 249],
     },
     columnStyles: {
-      0: { fillColor: [30, 41, 59], textColor: [248, 250, 252], fontStyle: 'bold', halign: 'left' },
+      0: { fillColor: [30, 41, 59], textColor: [248, 250, 252], fontStyle: 'bold', halign: 'left', cellWidth: 28 },
     },
   });
 
@@ -73,6 +73,7 @@ export function exportClassTimetablePDF(className, section, schedule, teachers, 
 
 export function exportTeacherTimetablePDF(teacherName, teacherSchedule, classes, periods) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const activePeriods = periods.filter(p => !p.isBreak);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
@@ -84,10 +85,12 @@ export function exportTeacherTimetablePDF(teacherName, teacherSchedule, classes,
   doc.setTextColor(100, 116, 139);
   doc.text(`Generated: ${new Date().toLocaleDateString()}`, 148.5, 22, { align: 'center' });
 
-  const head = [['Period', ...DAYS]];
-  const body = periods.map(period => {
-    const row = [`${period.label}\n${period.time || ''}`];
-    for (const day of DAYS) {
+  // Days = rows, Periods = columns
+  const head = [['Day', ...activePeriods.map(p => `${p.label}\n${p.time || ''}`)]];
+
+  const body = DAYS.map(day => {
+    const row = [day];
+    for (const period of activePeriods) {
       const slots = teacherSchedule[day]?.[period.id];
       if (slots && slots.length > 0) {
         const content = slots.map(slot => {
@@ -109,9 +112,9 @@ export function exportTeacherTimetablePDF(teacherName, teacherSchedule, classes,
     body,
     theme: 'grid',
     styles: { fontSize: 9, cellPadding: 4, halign: 'center', valign: 'middle' },
-    headStyles: { fillColor: [15, 23, 42], textColor: [248, 250, 252], fontStyle: 'bold' },
+    headStyles: { fillColor: [15, 23, 42], textColor: [248, 250, 252], fontStyle: 'bold', fontSize: 9 },
     alternateRowStyles: { fillColor: [241, 245, 249] },
-    columnStyles: { 0: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'left' } },
+    columnStyles: { 0: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'left', cellWidth: 28 } },
   });
 
   doc.save(`${teacherName.replace(/\s+/g, '_')}_Routine.pdf`);
@@ -119,6 +122,7 @@ export function exportTeacherTimetablePDF(teacherName, teacherSchedule, classes,
 
 export function exportAllClassesPDF(classes, schedule, teachers, periods) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const activePeriods = periods.filter(p => !p.isBreak);
 
   let pageAdded = false;
   classes.forEach((cls) => {
@@ -140,10 +144,12 @@ export function exportAllClassesPDF(classes, schedule, teachers, periods) {
       doc.setTextColor(100, 116, 139);
       doc.text(`Generated: ${new Date().toLocaleDateString()}`, 148.5, 22, { align: 'center' });
 
-      const head = [['Period', ...DAYS]];
-      const body = periods.map(period => {
-        const row = [`${period.label}\n${period.time || ''}`];
-        for (const day of DAYS) {
+      // Days = rows, Periods = columns
+      const head = [['Day', ...activePeriods.map(p => `${p.label}\n${p.time || ''}`)]];
+
+      const body = DAYS.map(day => {
+        const row = [day];
+        for (const period of activePeriods) {
           const slot = sectionSchedule[day]?.[period.id];
           if (slot) {
             const assignments = Array.isArray(slot) ? slot : [slot];
@@ -165,9 +171,9 @@ export function exportAllClassesPDF(classes, schedule, teachers, periods) {
         body,
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 3, halign: 'center', valign: 'middle' },
-        headStyles: { fillColor: [15, 23, 42], textColor: [248, 250, 252], fontStyle: 'bold' },
+        headStyles: { fillColor: [15, 23, 42], textColor: [248, 250, 252], fontStyle: 'bold', fontSize: 8 },
         alternateRowStyles: { fillColor: [241, 245, 249] },
-        columnStyles: { 0: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' } },
+        columnStyles: { 0: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'left', cellWidth: 24 } },
       });
     });
   });

@@ -174,6 +174,7 @@ function reducer(state, action) {
 export function ScheduleProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
   const [loading, setLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'saving', 'error'
   const { currentUser } = useAuth();
 
   // Initial load
@@ -196,9 +197,16 @@ export function ScheduleProvider({ children }) {
   // Sync to API - Only Admin should push global updates
   useEffect(() => {
     if (!loading && currentUser?.role === 'admin') {
-      api.schedule.save(state).catch(err => {
-        console.error('Failed to auto-save schedule:', err);
-      });
+      setSyncStatus('saving');
+      const timer = setTimeout(() => {
+        api.schedule.save(state)
+          .then(() => setSyncStatus('synced'))
+          .catch(err => {
+            console.error('Failed to auto-save schedule:', err);
+            setSyncStatus('error');
+          });
+      }, 1000); // 1s debounce to avoid spamming the API
+      return () => clearTimeout(timer);
     }
   }, [state, loading, currentUser]);
 
@@ -308,6 +316,7 @@ export function ScheduleProvider({ children }) {
     <ScheduleContext.Provider value={{
       ...state,
       loading,
+      syncStatus,
       dispatch,
       placeSlot,
       removeSlot,
