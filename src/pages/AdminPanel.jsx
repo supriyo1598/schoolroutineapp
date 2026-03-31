@@ -22,7 +22,7 @@ const TABS = [
 
 // ===== Teachers Tab =====
 function TeachersTab() {
-  const { getAllTeachers, updateTeacher, deleteUser } = useAuth();
+  const { getAllTeachers, updateUser, deleteUser } = useAuth();
   const { subjects, classes, getTeacherSchedule, periods, isTeacherAbsent } = useSchedule();
   const { showToast } = useNotification();
   const [editingId, setEditingId] = useState(null);
@@ -45,7 +45,7 @@ function TeachersTab() {
   }
 
   async function saveEdit() {
-    await updateTeacher(editingId, { name: form.name, email: form.email, phone: form.phone, subjects: form.subjects, classes: form.classes });
+    await updateUser(editingId, { name: form.name, email: form.email, phone: form.phone, subjects: form.subjects, classes: form.classes });
     showToast('Teacher updated.', 'success');
     closeForm();
   }
@@ -371,14 +371,14 @@ function PeriodsTab() {
 // ===== Users Tab (Super Admin Only) =====
 function UsersTab() {
   const { users, approveUser, rejectUser, deleteUser, createUserAccount, updateUser } = useAuth();
-  const { classes } = useSchedule();
+  const { classes, subjects } = useSchedule();
   const { showToast } = useNotification();
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ 
-    name: '', username: '', password: '', role: 'teacher', email: '', phone: '', assignedClasses: [] 
+    name: '', username: '', password: '', role: 'teacher', email: '', phone: '', assignedClasses: [], subjects: [], classes: [] 
   });
 
   const pending = users.filter(t => t.status === 'pending');
@@ -415,7 +415,9 @@ function UsersTab() {
         name: form.name, 
         email: form.email, 
         phone: form.phone, 
-        assignedClasses: form.assignedClasses 
+        assignedClasses: form.assignedClasses,
+        subjects: form.subjects,
+        classes: form.classes
       });
       showToast('User updated globally.', 'success');
       setEditingUser(null);
@@ -428,7 +430,7 @@ function UsersTab() {
   }
 
   function resetForm() {
-    setForm({ name: '', username: '', password: '', role: 'teacher', email: '', phone: '', assignedClasses: [] });
+    setForm({ name: '', username: '', password: '', role: 'teacher', email: '', phone: '', assignedClasses: [], subjects: [], classes: [] });
   }
 
   function openEdit(user) {
@@ -439,16 +441,32 @@ function UsersTab() {
       role: user.role, 
       email: user.email || '', 
       phone: user.phone || '', 
-      assignedClasses: user.assignedClasses || [] 
+      assignedClasses: user.assignedClasses || [],
+      subjects: user.subjects || [],
+      classes: user.classes || []
     });
   }
 
-  function toggleClass(id) {
+  function toggleAssignedClass(id) {
     setForm(p => ({
       ...p,
       assignedClasses: p.assignedClasses.includes(id) 
         ? p.assignedClasses.filter(x => x !== id)
         : [...p.assignedClasses, id]
+    }));
+  }
+
+  function toggleSubject(s) {
+    setForm(p => ({
+      ...p,
+      subjects: p.subjects.includes(s) ? p.subjects.filter(x => x !== s) : [...p.subjects, s]
+    }));
+  }
+
+  function toggleTeacherClass(id) {
+    setForm(p => ({
+      ...p,
+      classes: p.classes.includes(id) ? p.classes.filter(x => x !== id) : [...p.classes, id]
     }));
   }
 
@@ -517,8 +535,9 @@ function UsersTab() {
                     {classes.map(c => (
                       <button 
                         key={c.id} 
+                        type="button"
                         className={`chip-toggle ${form.assignedClasses.includes(c.id) ? 'active' : ''}`}
-                        onClick={() => toggleClass(c.id)}
+                        onClick={() => toggleAssignedClass(c.id)}
                       >
                         {c.name}
                       </button>
@@ -526,6 +545,35 @@ function UsersTab() {
                   </div>
                   <p className="text-dim text-xs mt-1">If no classes are selected, the admin will have no access to classes.</p>
                 </div>
+              )}
+
+              {form.role === 'teacher' && (
+                <>
+                  <div className="form-group">
+                    <label>Subjects (select all that apply)</label>
+                    <div className="chip-grid">
+                      {subjects.map(s => (
+                        <button key={s} type="button"
+                          className={`chip-toggle ${form.subjects.includes(s) ? 'active' : ''}`}
+                          onClick={() => toggleSubject(s)}>
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Assigned Classes (select all that apply)</label>
+                    <div className="chip-grid">
+                      {classes.map(c => (
+                        <button key={c.id} type="button"
+                          className={`chip-toggle ${form.classes.includes(c.id) ? 'active' : ''}`}
+                          onClick={() => toggleTeacherClass(c.id)}>
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
             <div className="modal-footer">
