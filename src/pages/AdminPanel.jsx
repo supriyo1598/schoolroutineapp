@@ -671,7 +671,7 @@ function UsersTab() {
 
 // ===== Timetable Tab =====
 function TimetableTab() {
-  const { classes, filteredClasses, schedule, periods, saveSchedule, syncStatus } = useSchedule();
+  const { classes, filteredClasses, schedule, periods, saveSchedule, syncStatus, lastSyncTime } = useSchedule();
   const { getApprovedTeachers } = useAuth();
   const { showToast } = useNotification();
   
@@ -727,6 +727,17 @@ function TimetableTab() {
           <select className="section-select" value={activeSection} onChange={e => setSelectedSection(e.target.value)}>
             {sections.map(s => <option key={s} value={s}>Section {s}</option>)}
           </select>
+          <div className="sync-status">
+            {syncStatus === 'error' ? (
+              <span className="sync-badge error">❌ Sync Error</span>
+            ) : syncStatus === 'saving' ? (
+              <span className="sync-badge saving">⏳ Saving...</span>
+            ) : (
+              <span className="sync-badge success">
+                {lastSyncTime ? `✅ Last Synced: ${lastSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : '⏳ Initializing...'}
+              </span>
+            )}
+          </div>
           <button 
             className={`btn-primary ${syncStatus === 'saving' ? 'loading' : ''}`} 
             onClick={handleManualSave}

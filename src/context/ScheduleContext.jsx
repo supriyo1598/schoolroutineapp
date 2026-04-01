@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, useState, useMemo } from 'react';
+import { createContext, useContext, useReducer, useEffect, useState, useMemo, useCallback } from 'react';
 import api from '../services/api';
 import { DAYS } from '../utils/constants';
 import { useAuth } from './AuthContext';
@@ -37,6 +37,9 @@ const INITIAL_STATE = {
   schedule: {},
   substitutions: {},
   absentTeachers: [],
+  lastChangedClassId: null,
+  lastChangeType: null,
+  lastChangeId: null,
 };
 
 function reducer(state, action) {
@@ -54,6 +57,9 @@ function reducer(state, action) {
 
       return {
         ...state,
+        lastChangedClassId: classId,
+        lastChangeType: 'class',
+        lastChangeId: Date.now(),
         schedule: {
           ...state.schedule,
           [classId]: {
@@ -87,6 +93,9 @@ function reducer(state, action) {
 
       return {
         ...state,
+        lastChangedClassId: classId,
+        lastChangeType: 'class',
+        lastChangeId: Date.now(),
         schedule: {
           ...state.schedule,
           [classId]: { ...(state.schedule[classId] || {}), [day]: daySchedule },
@@ -97,18 +106,20 @@ function reducer(state, action) {
       const { classId } = action.payload;
       const updated = { ...state.schedule };
       delete updated[classId];
-      return { ...state, schedule: updated };
+      return { ...state, lastChangedClassId: classId, lastChangeType: 'class', lastChangeId: Date.now(), schedule: updated };
     }
     case 'MARK_ABSENT': {
       const { teacherId, day } = action.payload;
       const exists = state.absentTeachers.find(a => a.teacherId === teacherId && a.day === day);
       if (exists) return state;
-      return { ...state, absentTeachers: [...state.absentTeachers, { teacherId, day }] };
+      return { ...state, lastChangeType: 'absent', lastChangeId: Date.now(), absentTeachers: [...state.absentTeachers, { teacherId, day }] };
     }
     case 'MARK_PRESENT': {
       const { teacherId, day } = action.payload;
       return {
         ...state,
+        lastChangeType: 'absent',
+        lastChangeId: Date.now(),
         absentTeachers: state.absentTeachers.filter(a => !(a.teacherId === teacherId && a.day === day)),
       };
     }
@@ -121,6 +132,8 @@ function reducer(state, action) {
 
       return {
         ...state,
+        lastChangeType: 'substitutions',
+        lastChangeId: Date.now(),
         substitutions: {
           ...state.substitutions,
           [day]: {
@@ -152,6 +165,8 @@ function reducer(state, action) {
 
       return {
         ...state,
+        lastChangeType: 'substitutions',
+        lastChangeId: Date.now(),
         substitutions: {
           ...state.substitutions,
           [day]: { ...(state.substitutions[day] || {}), [classId]: updatedClass },
@@ -159,13 +174,13 @@ function reducer(state, action) {
       };
     }
     case 'UPDATE_CLASSES':
-      return { ...state, classes: action.payload };
+      return { ...state, lastChangeType: 'config', lastChangeId: Date.now(), classes: action.payload };
     case 'UPDATE_PERIODS':
-      return { ...state, periods: action.payload };
+      return { ...state, lastChangeType: 'config', lastChangeId: Date.now(), periods: action.payload };
     case 'UPDATE_SUBJECTS':
-      return { ...state, subjects: action.payload };
+      return { ...state, lastChangeType: 'config', lastChangeId: Date.now(), subjects: action.payload };
     case 'RESET_SCHEDULE':
-      return { ...state, schedule: {}, substitutions: {}, absentTeachers: [] };
+      return { ...state, lastChangeType: 'config', lastChangeId: Date.now(), schedule: {}, substitutions: {}, absentTeachers: [] };
     default:
       return state;
   }
@@ -175,6 +190,8 @@ export function ScheduleProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'saving', 'error'
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [isFirstLoadDone, setIsFirstLoadDone] = useState(false);
   const { currentUser } = useAuth();
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
@@ -190,38 +207,114 @@ export function ScheduleProvider({ children }) {
     return state.classes;
   }, [state.classes, currentUser]);
 
-  // Initial load
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const data = await api.schedule.get();
-        if (data) {
-          dispatch({ type: 'SET_STATE', payload: data });
-        }
-      } catch (err) {
-        console.error('Failed to load schedule:', err);
-      } finally {
-        setLoading(false);
+  const loadData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    try {
+      const data = await api.schedule.get();
+      if (data) {
+        dispatch({ type: 'SET_STATE', payload: data });
+        setLastSyncTime(new Date());
+        setIsFirstLoadDone(true);
+        setSyncStatus('synced');
       }
+    } catch (err) {
+      console.error('Failed to load schedule:', err);
+      setSyncStatus('error');
+    } finally {
+      if (!isSilent) setLoading(false);
     }
-    loadData();
   }, []);
 
-  // Sync to API - Both Super Admin and Admin can push updates
+  // Initial load
   useEffect(() => {
-    if (!loading && isAdmin) {
-      setSyncStatus('saving');
-      const timer = setTimeout(() => {
-        api.schedule.save(state)
-          .then(() => setSyncStatus('synced'))
-          .catch(err => {
-            console.error('Failed to auto-save schedule:', err);
-            setSyncStatus('error');
-          });
-      }, 1000); // 1s debounce to avoid spamming the API
+    loadData();
+  }, [loadData]);
+
+  // Background Polling (30s)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (syncStatus !== 'saving') { // Don't pull while we are pushing
+        loadData(true);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loadData, syncStatus]);
+
+  // Refresh on Focus
+  useEffect(() => {
+    const handleFocus = () => loadData(true);
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadData]);
+
+  // Targeted Sync Worker - Pushes ONLY what changed
+  useEffect(() => {
+    if (!loading && isAdmin && isFirstLoadDone && state.lastChangeId) {
+      const { lastChangeType, lastChangedClassId } = state;
+      
+      const timer = setTimeout(async () => {
+        setSyncStatus('saving');
+        try {
+          if (lastChangeType === 'class' && lastChangedClassId) {
+            await api.schedule.updateKey(`sch_cls_${lastChangedClassId}`, state.schedule[lastChangedClassId]);
+          } else if (lastChangeType === 'absent') {
+            await api.schedule.updateKey('sch_absent', state.absentTeachers);
+          } else if (lastChangeType === 'substitutions') {
+            await api.schedule.updateKey('sch_substitutes', state.substitutions);
+          } else if (lastChangeType === 'config') {
+            await api.schedule.updateKey('sch_config', {
+              classes: state.classes,
+              periods: state.periods,
+              subjects: state.subjects
+            });
+          }
+          setSyncStatus('synced');
+          setLastSyncTime(new Date());
+        } catch (err) {
+          console.error('Granular sync failed:', err);
+          showToast('Sync Error: Failed to save some changes.', 'error');
+          setSyncStatus('error');
+        }
+      }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [state, loading, isAdmin]);
+  }, [state.lastChangeId, loading, isAdmin, isFirstLoadDone]);
+
+  // Handle Initial Migration: If new keys don't exist, split old schedule_data
+  useEffect(() => {
+    async function migrateIfNeeded() {
+      if (!isFirstLoadDone || !isAdmin) return;
+      try {
+        const rows = await api.schedule.getRaw();
+        const hasGranular = rows.some(r => r.key.startsWith('sch_cls_'));
+        const legacy = rows.find(r => r.key === 'schedule_data');
+        
+        if (!hasGranular && legacy?.value?.schedule) {
+          console.log('Migrating legacy schedule to granular rows...');
+          const sched = legacy.value.schedule;
+          for (const classId of Object.keys(sched)) {
+            await api.schedule.updateKey(`sch_cls_${classId}`, sched[classId]);
+          }
+          // Also migrate configuration
+          await api.schedule.updateKey('sch_config', {
+            classes: legacy.value.classes || state.classes,
+            periods: legacy.value.periods || state.periods,
+            subjects: legacy.value.subjects || state.subjects
+          });
+          if (legacy.value.absentTeachers) {
+            await api.schedule.updateKey('sch_absent', legacy.value.absentTeachers);
+          }
+          if (legacy.value.substitutions) {
+            await api.schedule.updateKey('sch_substitutes', legacy.value.substitutions);
+          }
+          console.log('Migration complete.');
+        }
+      } catch (err) {
+        console.error('Migration failed:', err);
+      }
+    }
+    migrateIfNeeded();
+  }, [isFirstLoadDone, isAdmin]);
 
 
   function placeSlot(classId, day, periodId, teacherId, subject) {
@@ -345,6 +438,7 @@ export function ScheduleProvider({ children }) {
       filteredClasses: filteredClasses || [],
       loading,
       syncStatus,
+      lastSyncTime,
       dispatch,
       placeSlot,
       removeSlot,

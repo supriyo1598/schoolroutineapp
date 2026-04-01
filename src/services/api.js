@@ -62,7 +62,8 @@ const api = {
             return mapped;
           }
         } catch (err) {
-          console.error('Supabase user fetch failed, falling back to local:', err);
+          console.error('Supabase user fetch failed:', err);
+          throw err; // Fail fast if DB is unreachable
         }
       }
       return JSON.parse(localStorage.getItem('srs_users') || '[]');
@@ -160,16 +161,73 @@ const api = {
 
   // --- SCHEDULE ---
   schedule: {
+    async getRaw() {
+      if (isSupabaseConfigured) {
+        try {
+          return await sbRequest('app_state?select=*');
+        } catch (err) {
+          console.error('Supabase raw state fetch failed:', err);
+          throw err;
+        }
+      }
+      return [];
+    },
     async get() {
       if (isSupabaseConfigured) {
         try {
-          const data = await sbRequest('app_state?key=eq.schedule_data&select=value');
-          if (data && data[0]?.value) return data[0].value;
+          const data = await sbRequest('app_state?select=*');
+          if (data && data.length > 0) {
+            // Find legacy key first
+            const legacy = data.find(r => r.key === 'schedule_data');
+            const classKeys = data.filter(r => r.key.startsWith('sch_cls_'));
+            const config = data.find(r => r.key === 'sch_config');
+            const absent = data.find(r => r.key === 'sch_absent');
+            const substitutes = data.find(r => r.key === 'sch_substitutes');
+
+            // Construct state by merging granular keys over legacy
+            let state = legacy?.value || {};
+            
+            if (config?.value) {
+              state = { ...state, ...config.value };
+            }
+            if (absent?.value) {
+              state.absentTeachers = absent.value;
+            }
+            if (substitutes?.value) {
+              state.substitutions = substitutes.value;
+            }
+            if (classKeys.length > 0) {
+              state.schedule = state.schedule || {};
+              classKeys.forEach(row => {
+                const classId = row.key.replace('sch_cls_', '');
+                state.schedule[classId] = row.value;
+              });
+            }
+            
+            // If we only have legacy, or if we consolidated, update local
+            localStorage.setItem('srs_schedule_data', JSON.stringify(state));
+            return state;
+          }
         } catch (err) {
-          console.error('Supabase schedule fetch failed, falling back to local:', err);
+          console.error('Supabase schedule fetch failed:', err);
+          throw err; // Fail fast if DB is unreachable
         }
       }
       return JSON.parse(localStorage.getItem('srs_schedule_data') || 'null');
+    },
+    async updateKey(key, value) {
+      if (isSupabaseConfigured) {
+        try {
+          await sbRequest('app_state?on_conflict=key', {
+            method: 'POST',
+            headers: { 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify({ key, value }),
+          });
+        } catch (err) {
+          console.error(`Supabase schedule sync failed for key ${key}:`, err);
+          throw err;
+        }
+      }
     },
     async save(data) {
       // Immediate local save
@@ -196,9 +254,13 @@ const api = {
       if (isSupabaseConfigured) {
         try {
           const data = await sbRequest('notifications?select=*&order=timestamp.desc');
-          if (data && data.length > 0) return data;
+          if (data) {
+            localStorage.setItem('srs_notifications', JSON.stringify(data));
+            return data;
+          }
         } catch (err) {
-          console.error('Supabase notifications fetch failed, falling back to local:', err);
+          console.error('Supabase notifications fetch failed:', err);
+          throw err;
         }
       }
       return JSON.parse(localStorage.getItem('srs_notifications') || '[]');
@@ -256,9 +318,13 @@ const api = {
       if (isSupabaseConfigured) {
         try {
           const data = await sbRequest('leave_applications?select=*&order=created_at.desc');
-          if (data) return data;
+          if (data) {
+            localStorage.setItem('srs_leaves', JSON.stringify(data));
+            return data;
+          }
         } catch (err) {
-          console.error('Supabase leave applications fetch failed, falling back to local:', err);
+          console.error('Supabase leave applications fetch failed:', err);
+          throw err;
         }
       }
       return JSON.parse(localStorage.getItem('srs_leaves') || '[]');

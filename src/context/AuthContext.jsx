@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 
 const AuthContext = createContext(null);
@@ -20,20 +20,37 @@ export function AuthProvider({ children }) {
     catch { return null; }
   });
 
+  const loadUsers = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    try {
+      const data = await api.users.getAll();
+      setUsers(data);
+    } catch (err) {
+      console.error('Failed to load users:', err);
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
-    async function loadData() {
-      try {
-        const data = await api.users.getAll();
-        setUsers(data);
-      } catch (err) {
-        console.error('Failed to load users:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
+    loadUsers();
+  }, [loadUsers]);
+
+  // Background Polling (30s)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUsers(true);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loadUsers]);
+
+  // Refresh on Focus
+  useEffect(() => {
+    const handleFocus = () => loadUsers(true);
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadUsers]);
 
   // Save session to localStorage (still needed for staying logged in on refresh)
   useEffect(() => {
@@ -136,15 +153,13 @@ export function AuthProvider({ children }) {
   }
 
   async function approveUser(userId) {
-    const updatedUsers = users.map(u => u.id === userId ? { ...u, status: 'approved' } : u);
-    setUsers(updatedUsers);
     await api.users.update(userId, { status: 'approved' });
+    loadUsers(true);
   }
 
   async function rejectUser(userId) {
-    const updatedUsers = users.map(u => u.id === userId ? { ...u, status: 'rejected' } : u);
-    setUsers(updatedUsers);
     await api.users.update(userId, { status: 'rejected' });
+    loadUsers(true);
   }
 
   async function deleteUser(userId) {
