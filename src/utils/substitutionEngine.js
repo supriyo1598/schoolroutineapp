@@ -21,11 +21,26 @@ export function findSubstitutes(absentTeacherId, day, schedule, teachers, substi
 
   // For each slot, find eligible substitutes
   const suggestions = slots.map(slot => {
-    // Find teachers who teach this subject
+    // Find teachers who take classes in this class
+    const classTeachers = new Set();
+    const classSchedule = schedule[slot.classId] || {};
+    for (const d of Object.keys(classSchedule)) {
+      for (const p of Object.keys(classSchedule[d])) {
+        const s = classSchedule[d][p];
+        if (s) {
+          const arr = Array.isArray(s) ? s : [s];
+          arr.forEach(a => {
+            if (a.teacherId) classTeachers.add(a.teacherId);
+          });
+        }
+      }
+    }
+
+    // Find candidates who teach this subject OR take classes in this class
     const candidates = teachers.filter(t => {
       if (t.id === absentTeacherId) return false;
       if (!t.subjects || t.subjects.length === 0) return true;
-      return t.subjects.includes(slot.subject);
+      return t.subjects.includes(slot.subject) || classTeachers.has(t.id);
     });
 
     // Sort by periods already assigned on this day (ascending)
@@ -73,7 +88,12 @@ export function findSubstitutes(absentTeacherId, day, schedule, teachers, substi
            }
         }
       }
-      return { teacher: t, periodsToday: count, busy };
+      let isSubjectMatch = t.subjects && t.subjects.includes(slot.subject);
+      let isClassMatch = classTeachers.has(t.id);
+      let matchType = isSubjectMatch && isClassMatch ? 'Subject & Class' :
+                      isSubjectMatch ? 'Subject' : 'Class Teacher';
+
+      return { teacher: t, periodsToday: count, busy, matchType };
     })
       .filter(c => !c.busy && c.periodsToday < 7)
       .sort((a, b) => a.periodsToday - b.periodsToday);

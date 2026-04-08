@@ -48,6 +48,17 @@ export default function TeacherPanel() {
 
   return (
     <div className="app-layout">
+      {/* Mobile Top Header */}
+      <header className="mobile-header">
+        <div className="mobile-brand">
+          <span className="brand-icon">📚</span>
+          <span className="brand-name">SchoolRoutine</span>
+        </div>
+        <button className="mobile-logout" onClick={logout} title="Logout">
+          <span className="nav-icon">🚪</span>
+        </button>
+      </header>
+
       <aside className="app-sidebar">
         <div className="sidebar-brand">
           <span className="brand-icon">📚</span>
@@ -82,6 +93,25 @@ export default function TeacherPanel() {
           <button className="btn-logout" onClick={logout}>Sign Out</button>
         </div>
       </aside>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="mobile-nav">
+        <button className={`mobile-nav-item ${activeTab === 'timetable' ? 'active' : ''}`} onClick={() => setActiveTab('timetable')}>
+          <span className="nav-icon">📅</span>
+          <span className="nav-label">Schedule</span>
+        </button>
+        <button className={`mobile-nav-item ${activeTab === 'notifications' ? 'active' : ''}`} onClick={async () => { setActiveTab('notifications'); await markAllRead(currentUser?.id); }}>
+          <div className="nav-icon-wrapper">
+            <span className="nav-icon">🔔</span>
+            {unreadCount > 0 && <span className="notif-badge-sm">{unreadCount}</span>}
+          </div>
+          <span className="nav-label">Alerts</span>
+        </button>
+        <button className={`mobile-nav-item ${activeTab === 'leave' ? 'active' : ''}`} onClick={() => setActiveTab('leave')}>
+          <span className="nav-icon">🌴</span>
+          <span className="nav-label">Leave</span>
+        </button>
+      </nav>
 
       <main className="app-main">
         {activeTab === 'timetable' && (

@@ -141,7 +141,7 @@ export default function SubstitutionPanel() {
                       >
                         {slot.suggestions.map(s => (
                           <option key={s.teacher.id} value={s.teacher.id}>
-                            {s.teacher.name} ({s.periodsToday} periods today)
+                            {s.teacher.name} ({s.matchType} • {s.periodsToday} periods today)
                           </option>
                         ))}
                       </select>

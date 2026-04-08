@@ -34,6 +34,7 @@ const INITIAL_STATE = {
   classes: DEFAULT_CLASSES,
   periods: DEFAULT_PERIODS,
   subjects: DEFAULT_SUBJECTS,
+  isLocked: false,
   schedule: {},
   substitutions: {},
   absentTeachers: [],
@@ -179,6 +180,8 @@ function reducer(state, action) {
       return { ...state, lastChangeType: 'config', lastChangeId: Date.now(), periods: action.payload };
     case 'UPDATE_SUBJECTS':
       return { ...state, lastChangeType: 'config', lastChangeId: Date.now(), subjects: action.payload };
+    case 'TOGGLE_LOCK':
+      return { ...state, lastChangeType: 'config', lastChangeId: Date.now(), isLocked: !state.isLocked };
     case 'RESET_SCHEDULE':
       return { ...state, lastChangeType: 'config', lastChangeId: Date.now(), schedule: {}, substitutions: {}, absentTeachers: [] };
     default:
@@ -265,7 +268,8 @@ export function ScheduleProvider({ children }) {
             await api.schedule.updateKey('sch_config', {
               classes: state.classes,
               periods: state.periods,
-              subjects: state.subjects
+              subjects: state.subjects,
+              isLocked: state.isLocked
             });
           }
           setSyncStatus('synced');
@@ -299,7 +303,8 @@ export function ScheduleProvider({ children }) {
           await api.schedule.updateKey('sch_config', {
             classes: legacy.value.classes || state.classes,
             periods: legacy.value.periods || state.periods,
-            subjects: legacy.value.subjects || state.subjects
+            subjects: legacy.value.subjects || state.subjects,
+            isLocked: legacy.value.isLocked || state.isLocked
           });
           if (legacy.value.absentTeachers) {
             await api.schedule.updateKey('sch_absent', legacy.value.absentTeachers);
@@ -339,6 +344,10 @@ export function ScheduleProvider({ children }) {
 
   function removeSubstitute(classId, day, periodId, substituteId = null) {
     dispatch({ type: 'REMOVE_SUBSTITUTE', payload: { classId, day, periodId, substituteId } });
+  }
+
+  function toggleLock() {
+    dispatch({ type: 'TOGGLE_LOCK' });
   }
 
   async function saveSchedule() {
@@ -446,6 +455,7 @@ export function ScheduleProvider({ children }) {
       markPresent,
       assignSubstitute,
       removeSubstitute,
+      toggleLock,
       saveSchedule,
       getEffectiveTeacher,
       isTeacherAbsent,

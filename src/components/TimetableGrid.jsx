@@ -8,12 +8,13 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { checkConflicts } from '../utils/conflictDetection';
 
-function DraggableTeacherChip({ teacher, subjects, classId }) {
+function DraggableTeacherChip({ teacher, subjects, classId, lockedView }) {
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] || '—');
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `drag-${teacher.id}`,
     data: { teacherId: teacher.id, teacherName: teacher.name, subject: selectedSubject, classId, type: 'teacher-chip' },
+    disabled: lockedView,
   });
 
   return (
@@ -29,18 +30,23 @@ function DraggableTeacherChip({ teacher, subjects, classId }) {
             value={selectedSubject}
             onChange={(e) => setSelectedSubject(e.target.value)}
             className="mini-select"
+            disabled={lockedView}
           >
             {subjects.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>
-      <div className="chip-drag-handle" {...listeners} {...attributes}>⠿</div>
+      {!lockedView && <div className="chip-drag-handle" {...listeners} {...attributes}>⠿</div>}
     </div>
   );
 }
 
-function DroppableCell({ classId, day, periodId, slots, isBreak, onRemove }) {
-  const { isOver, setNodeRef } = useDroppable({ id: `${classId}__${day}__${periodId}`, data: { classId, day, periodId } });
+function DroppableCell({ classId, day, periodId, slots, isBreak, onRemove, lockedView }) {
+  const { isOver, setNodeRef } = useDroppable({ 
+    id: `${classId}__${day}__${periodId}`, 
+    data: { classId, day, periodId },
+    disabled: lockedView
+  });
   const { isTeacherAbsent } = useSchedule();
 
   if (isBreak) {
@@ -48,7 +54,7 @@ function DroppableCell({ classId, day, periodId, slots, isBreak, onRemove }) {
   }
 
   return (
-    <td ref={setNodeRef} className={`period-cell ${isOver ? 'cell-over' : ''} ${slots.length > 0 ? 'cell-filled' : 'cell-empty'}`}>
+    <td ref={setNodeRef} className={`period-cell ${isOver && !lockedView ? 'cell-over' : ''} ${slots.length > 0 ? 'cell-filled' : 'cell-empty'}`}>
       {slots.length > 0 ? (
         <div className="cell-assignments">
           {slots.map((s, idx) => {
@@ -61,7 +67,7 @@ function DroppableCell({ classId, day, periodId, slots, isBreak, onRemove }) {
                 </div>
                 {s.isSubstitute && <span className="cell-sub-badge">SUB</span>}
                 {absent && <span className="cell-absent-badge">ABSENT</span>}
-                <button className="cell-remove" onClick={() => onRemove(classId, day, periodId, s.teacherId)} title="Remove">×</button>
+                {!lockedView && <button className="cell-remove" onClick={() => onRemove(classId, day, periodId, s.teacherId)} title="Remove">×</button>}
               </div>
             );
           })}
@@ -74,9 +80,11 @@ function DroppableCell({ classId, day, periodId, slots, isBreak, onRemove }) {
 }
 
 export default function TimetableGrid({ selectedClass, selectedSection }) {
-  const { schedule, periods, placeSlot, removeSlot, substitutions, classes } = useSchedule();
-  const { getApprovedTeachers } = useAuth();
+  const { schedule, periods, placeSlot, removeSlot, substitutions, classes, isLocked } = useSchedule();
+  const { getApprovedTeachers, currentUser } = useAuth();
   const { showToast } = useNotification();
+
+  const lockedView = isLocked && currentUser?.role !== 'super_admin';
 
   const [activeData, setActiveData] = useState(null);
   const [teacherSearch, setTeacherSearch] = useState('');
@@ -92,6 +100,7 @@ export default function TimetableGrid({ selectedClass, selectedSection }) {
 
   const handleDragEnd = useCallback((event) => {
     setActiveData(null);
+    if (lockedView) return;
     const { active, over } = event;
     if (!over) return;
     const dragData = active.data.current;
@@ -113,12 +122,13 @@ export default function TimetableGrid({ selectedClass, selectedSection }) {
     
     placeSlot(scheduleKey, day, periodId, teacherId, subject || '—');
     showToast(`${teacherName} assigned to ${className} - ${selectedSection}`, 'success');
-  }, [schedule, placeSlot, showToast, scheduleKey, selectedClass, selectedSection, teachers, classes]);
+  }, [schedule, placeSlot, showToast, scheduleKey, selectedClass, selectedSection, teachers, classes, lockedView]);
 
   const handleRemove = useCallback((classId, day, periodId, teacherId) => {
+    if (lockedView) return;
     removeSlot(classId, day, periodId, teacherId);
     showToast('Assignment removed.', 'info');
-  }, [removeSlot, showToast]);
+  }, [removeSlot, showToast, lockedView]);
 
   // Sidebar: teachers assigned to the selected class, sorted alphabetically, filtered by search
   const sidebarTeachers = teachers
@@ -161,6 +171,7 @@ export default function TimetableGrid({ selectedClass, selectedSection }) {
                 teacher={teacher}
                 subjects={subjects}
                 classId={selectedClass}
+                lockedView={lockedView}
               />
             ))}
           </div>
@@ -220,6 +231,7 @@ export default function TimetableGrid({ selectedClass, selectedSection }) {
                         periodId={period.id}
                         slots={effectiveSlots}
                         onRemove={handleRemove}
+                        lockedView={lockedView}
                       />
                     );
                   })}

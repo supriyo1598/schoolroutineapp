@@ -671,8 +671,8 @@ function UsersTab() {
 
 // ===== Timetable Tab =====
 function TimetableTab() {
-  const { classes, filteredClasses, schedule, periods, saveSchedule, syncStatus, lastSyncTime } = useSchedule();
-  const { getApprovedTeachers } = useAuth();
+  const { classes, filteredClasses, schedule, periods, saveSchedule, syncStatus, lastSyncTime, isLocked, toggleLock } = useSchedule();
+  const { getApprovedTeachers, currentUser } = useAuth();
   const { showToast } = useNotification();
   
   const displayClasses = filteredClasses.length > 0 ? filteredClasses : classes;
@@ -705,6 +705,10 @@ function TimetableTab() {
   }
 
   async function handleManualSave() {
+    if (isLocked && currentUser?.role !== 'super_admin') {
+      showToast('Routine is locked by Super Admin.', 'warning');
+      return;
+    }
     const res = await saveSchedule();
     if (res.success) {
       showToast('All changes saved and synchronized successfully!', 'success');
@@ -738,10 +742,21 @@ function TimetableTab() {
               </span>
             )}
           </div>
+          {currentUser?.role === 'super_admin' && (
+            <button 
+              className={`btn-outline ${isLocked ? 'btn-danger' : 'btn-primary'}`}
+              onClick={toggleLock}
+            >
+              {isLocked ? '🔓 Unlock Routine' : '🔒 Lock Routine'}
+            </button>
+          )}
+          {isLocked && currentUser?.role !== 'super_admin' && (
+            <span className="sync-badge error" style={{ padding: '0.25rem 0.75rem', background: 'var(--bg-danger)', color: 'var(--danger-text)' }}>🔒 Locked</span>
+          )}
           <button 
             className={`btn-primary ${syncStatus === 'saving' ? 'loading' : ''}`} 
             onClick={handleManualSave}
-            disabled={syncStatus === 'saving'}
+            disabled={syncStatus === 'saving' || (isLocked && currentUser?.role !== 'super_admin')}
           >
             {syncStatus === 'saving' ? '⏳ Saving...' : '💾 Save & Finish'}
           </button>
