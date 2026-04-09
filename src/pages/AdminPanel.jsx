@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSchedule } from '../context/ScheduleContext';
 import { DAYS } from '../utils/constants';
@@ -8,6 +8,7 @@ import { findSubstitutes } from '../utils/substitutionEngine';
 import TimetableGrid from '../components/TimetableGrid';
 import SubstitutionPanel from '../components/SubstitutionPanel';
 import { exportClassTimetablePDF, exportAllClassesPDF } from '../utils/exportUtils';
+import api from '../services/api';
 
 const TABS = [
   { id: 'timetable', label: '📅 Timetable', icon: '📅', roles: ['super_admin', 'admin'] },
@@ -18,6 +19,8 @@ const TABS = [
   { id: 'users', label: '👥 User Management', icon: '👥', roles: ['super_admin'] },
   { id: 'notifications', label: '🔔 Broadcast', icon: '🔔', roles: ['super_admin', 'admin'] },
   { id: 'leaves', label: '🌴 Leave Requests', icon: '🌴', roles: ['super_admin', 'admin'] },
+  { id: 'branches', label: '📍 Branches', icon: '📍', roles: ['super_admin'] },
+  { id: 'attendance', label: '📝 Attendance', icon: '📝', roles: ['super_admin', 'admin'] },
 ];
 
 // ===== Teachers Tab =====
@@ -29,8 +32,14 @@ function TeachersTab() {
   const [viewingTimelineId, setViewingTimelineId] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', phone: '', subjects: [], classes: [] });
   const [showForm, setShowForm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const teachers = getAllTeachers().filter(u => u.status === 'approved');
+  const teachers = useMemo(() => {
+    return getAllTeachers()
+      .filter(u => u.status === 'approved')
+      .filter(u => u.name.toLowerCase().includes(searchTerm.toLowerCase()) || (u.username && u.username.toLowerCase().includes(searchTerm.toLowerCase())) || (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [getAllTeachers, searchTerm]);
 
   function openEdit(teacher) {
     setForm({ name: teacher.name, email: teacher.email || '', phone: teacher.phone || '', subjects: teacher.subjects || [], classes: teacher.classes || [] });
@@ -177,6 +186,17 @@ function TeachersTab() {
           </div>
         </div>
       )}
+
+      <div className="section-card mt-2 mb-4">
+        <input 
+          type="text" 
+          value={searchTerm} 
+          onChange={e => setSearchTerm(e.target.value)} 
+          placeholder="Search teachers by name, username, or email..." 
+          className="search-input"
+          style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+        />
+      </div>
 
       <div className="table-container">
         <table className="data-table">
@@ -378,8 +398,14 @@ function UsersTab() {
   const [editingUser, setEditingUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ 
-    name: '', username: '', password: '', role: 'teacher', email: '', phone: '', assignedClasses: [], subjects: [], classes: [] 
+    name: '', username: '', password: '', role: 'teacher', email: '', phone: '', assignedClasses: [], subjects: [], classes: [],
+    branchId: '', totalCl: 0, remainingCl: 0
   });
+  const [branches, setBranches] = useState([]);
+
+  useEffect(() => {
+    api.branches.getAll().then(setBranches);
+  }, []);
 
   const pending = users.filter(t => t.status === 'pending');
   const admins = users.filter(u => u.role === 'admin');
@@ -392,16 +418,20 @@ function UsersTab() {
     }
     setLoading(true);
     try {
-      const res = await createUserAccount(form);
+      const res = await createUserAccount({
+        ...form,
+        totalCl: parseInt(form.totalCl || 0),
+        remainingCl: parseFloat(form.remainingCl || 0)
+      });
       if (res.success) {
-        showToast(`${form.role === 'admin' ? 'Admin' : 'Teacher'} created successfully in database.`, 'success');
+        showToast(`${form.role === 'admin' ? 'Admin' : 'Teacher'} created successfully.`, 'success');
         setShowAddModal(false);
         resetForm();
       } else {
         showToast(res.error, 'error');
       }
     } catch (err) {
-      showToast('DB Error: Failed to create user. Please check your connection.', 'error');
+      showToast('DB Error: Failed to create user.', 'error');
     } finally {
       setLoading(false);
     }
@@ -417,9 +447,12 @@ function UsersTab() {
         phone: form.phone, 
         assignedClasses: form.assignedClasses,
         subjects: form.subjects,
-        classes: form.classes
+        classes: form.classes,
+        branchId: form.branchId,
+        totalCl: parseInt(form.totalCl || 0),
+        remainingCl: parseFloat(form.remainingCl || 0)
       });
-      showToast('User updated globally.', 'success');
+      showToast('User updated successfully.', 'success');
       setEditingUser(null);
       resetForm();
     } catch (err) {
@@ -430,11 +463,14 @@ function UsersTab() {
   }
 
   function resetForm() {
-    setForm({ name: '', username: '', password: '', role: 'teacher', email: '', phone: '', assignedClasses: [], subjects: [], classes: [] });
+    setForm({ 
+      name: '', username: '', password: '', role: 'teacher', email: '', phone: '', 
+      assignedClasses: [], subjects: [], classes: [], branchId: '',
+      totalCl: 0, remainingCl: 0 
+    });
   }
 
   function openEdit(user) {
-    setEditingUser(user);
     setForm({ 
       name: user.name, 
       username: user.username, 
@@ -443,8 +479,12 @@ function UsersTab() {
       phone: user.phone || '', 
       assignedClasses: user.assignedClasses || [],
       subjects: user.subjects || [],
-      classes: user.classes || []
+      classes: user.classes || [],
+      branchId: user.branchId || '',
+      totalCl: user.totalCl || 0,
+      remainingCl: user.remainingCl || 0
     });
+    setEditingUser(user);
   }
 
   function toggleAssignedClass(id) {
@@ -517,6 +557,14 @@ function UsersTab() {
                   </select>
                 </div>
               )}
+              <div className="form-group">
+                <label>Assigned Branch</label>
+                <select value={form.branchId || ''} onChange={e => setForm(p => ({ ...p, branchId: e.target.value }))}>
+                  <option value="">No branch assigned</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+
               <div className="form-row">
                 <div className="form-group">
                   <label>Email</label>
@@ -571,6 +619,16 @@ function UsersTab() {
                           {c.name}
                         </button>
                       ))}
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Total Casual Leave</label>
+                      <input type="number" value={form.totalCl || 0} onChange={e => setForm(p => ({ ...p, totalCl: e.target.value, remainingCl: e.target.value }))} />
+                    </div>
+                    <div className="form-group">
+                       <label>Remaining CL</label>
+                       <input type="number" step="0.5" value={form.remainingCl || 0} onChange={e => setForm(p => ({ ...p, remainingCl: e.target.value }))} />
                     </div>
                   </div>
                 </>
@@ -645,13 +703,14 @@ function UsersTab() {
           <h3>Approved Teachers</h3>
           <div className="table-container">
             <table className="data-table">
-              <thead><tr><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Name</th><th>Branch</th><th>CL (Rem/Tot)</th><th>Actions</th></tr></thead>
               <tbody>
-                {teachers.length === 0 && <tr><td colSpan={3} className="empty-row">No teachers yet.</td></tr>}
+                {teachers.length === 0 && <tr><td colSpan={4} className="empty-row">No teachers yet.</td></tr>}
                 {teachers.map(u => (
                   <tr key={u.id}>
                     <td><strong>{u.name}</strong><br/><code className="text-xs">{u.username}</code></td>
-                    <td><StatusBadge status={u.status} /></td>
+                    <td>{branches.find(b => b.id === u.branchId)?.name || <span className="text-dim">None</span>}</td>
+                    <td>{u.remainingCl} / {u.totalCl}</td>
                     <td>
                       <div className="action-btns">
                         <button className="btn-edit" onClick={() => openEdit(u)}>Edit</button>
@@ -675,7 +734,8 @@ function TimetableTab() {
   const { getApprovedTeachers, currentUser } = useAuth();
   const { showToast } = useNotification();
   
-  const displayClasses = filteredClasses.length > 0 ? filteredClasses : classes;
+  const displayClasses = [...(filteredClasses.length > 0 ? filteredClasses : classes)]
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   
   const [selectedClass, setSelectedClass] = useState(displayClasses[0]?.id || '');
   const [selectedSection, setSelectedSection] = useState('A');
@@ -785,6 +845,8 @@ export default function AdminPanel() {
     users: <UsersTab />,
     notifications: <NotificationsTab />,
     leaves: <LeavesTab />,
+    branches: <BranchesTab />,
+    attendance: <AttendanceTab />,
   };
 
   return (
@@ -1061,6 +1123,169 @@ function NotificationsTab() {
             🚀 Send Broadcast
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ===== Branches Tab (Super Admin Only) =====
+function BranchesTab() {
+  const [branches, setBranches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editingBranch, setEditingBranch] = useState(null);
+  const [form, setForm] = useState({ name: '', latitude: '', longitude: '', start_time: '08:00', late_threshold: '08:15' });
+  const { showToast } = useNotification();
+
+  const loadBranches = async () => {
+    try {
+      const data = await api.branches.getAll();
+      setBranches(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadBranches(); }, []);
+
+  async function handleSave() {
+    if (!form.name || !form.latitude || !form.longitude) return showToast('Fill all fields.', 'warning');
+    const branchData = {
+      ...form,
+      latitude: parseFloat(form.latitude),
+      longitude: parseFloat(form.longitude)
+    };
+    try {
+      if (editingBranch) {
+        await api.branches.update(editingBranch.id, branchData);
+        showToast('Branch updated.', 'success');
+      } else {
+        await api.branches.create({ id: 'br_' + Date.now(), ...branchData });
+        showToast('Branch created.', 'success');
+      }
+      setShowModal(false);
+      setEditingBranch(null);
+      setForm({ name: '', latitude: '', longitude: '', start_time: '08:00', late_threshold: '08:15' });
+      loadBranches();
+    } catch (err) {
+      showToast('Error saving branch.', 'error');
+    }
+  }
+
+  return (
+    <div className="tab-content">
+      <div className="tab-header">
+        <h2>Branch Management</h2>
+        <button className="btn-primary" onClick={() => { setEditingBranch(null); setShowModal(true); }}>+ Add Branch</button>
+      </div>
+
+      {showModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+               <h3>{editingBranch ? 'Edit Branch' : 'Add Branch'}</h3>
+               <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+               <div className="form-group">
+                 <label>Branch Name</label>
+                 <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Main Campus" />
+               </div>
+               <div className="form-row">
+                 <div className="form-group">
+                   <label>Latitude</label>
+                   <input type="number" step="any" value={form.latitude} onChange={e => setForm(p => ({ ...p, latitude: e.target.value }))} placeholder="22.5726" />
+                 </div>
+                 <div className="form-group">
+                   <label>Longitude</label>
+                   <input type="number" step="any" value={form.longitude} onChange={e => setForm(p => ({ ...p, longitude: e.target.value }))} placeholder="88.3639" />
+                 </div>
+               </div>
+               <div className="form-row">
+                 <div className="form-group">
+                   <label>Start Time (24h)</label>
+                   <input type="time" value={form.start_time} onChange={e => setForm(p => ({ ...p, start_time: e.target.value }))} />
+                 </div>
+                 <div className="form-group">
+                   <label>Late After (24h)</label>
+                   <input type="time" value={form.late_threshold} onChange={e => setForm(p => ({ ...p, late_threshold: e.target.value }))} />
+                 </div>
+               </div>
+            </div>
+            <div className="modal-footer">
+               <button className="btn-ghost" onClick={() => setShowModal(false)}>Cancel</button>
+               <button className="btn-primary" onClick={handleSave}>Save Branch</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="section-card">
+        <div className="table-container">
+           <table className="data-table">
+             <thead><tr><th>Name</th><th>Location</th><th>Timing</th><th>Actions</th></tr></thead>
+             <tbody>
+               {branches.map(b => (
+                 <tr key={b.id}>
+                   <td><strong>{b.name}</strong></td>
+                   <td><code>{b.latitude}, {b.longitude}</code></td>
+                   <td>{b.start_time} (Late: {b.late_threshold})</td>
+                   <td>
+                     <div className="action-btns">
+                       <button className="btn-edit" onClick={() => { setEditingBranch(b); setForm(b); setShowModal(true); }}>Edit</button>
+                       <button className="btn-danger-sm" onClick={async () => { await api.branches.delete(b.id); loadBranches(); }}>Delete</button>
+                     </div>
+                   </td>
+                 </tr>
+               ))}
+             </tbody>
+           </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Attendance Tab =====
+function AttendanceTab() {
+  const [logs, setLogs] = useState([]);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [branches, setBranches] = useState([]);
+  const { users } = useAuth();
+
+  useEffect(() => {
+    api.branches.getAll().then(setBranches);
+    api.attendance.getByDate(date).then(setLogs);
+  }, [date]);
+
+  return (
+    <div className="tab-content">
+      <div className="tab-header">
+        <h2>Attendance Logs</h2>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="class-select" />
+      </div>
+
+      <div className="section-card">
+        <div className="table-container">
+          <table className="data-table">
+            <thead><tr><th>Teacher</th><th>Branch</th><th>Time</th><th>Status</th></tr></thead>
+            <tbody>
+              {logs.length === 0 && <tr><td colSpan={4} className="empty-row">No attendance records for this date.</td></tr>}
+              {logs.map(l => {
+                const teacher = users.find(u => u.id === l.teacher_id);
+                const branch = branches.find(b => b.id === l.branch_id);
+                return (
+                  <tr key={l.id}>
+                    <td><strong>{teacher?.name || l.teacher_id}</strong></td>
+                    <td>{branch?.name || 'Unknown'}</td>
+                    <td>{l.time}</td>
+                    <td><span className={`status-badge badge-${l.status}`}>{l.status}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

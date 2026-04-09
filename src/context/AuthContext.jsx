@@ -109,6 +109,9 @@ export function AuthProvider({ children }) {
       classes: [],
       assignedClasses: [],
       createdAt: new Date().toISOString(),
+      totalCl: 0,
+      remainingCl: 0,
+      branchId: null,
     };
 
     try {
@@ -139,6 +142,9 @@ export function AuthProvider({ children }) {
       classes: data.classes || [],
       assignedClasses: data.assignedClasses || [],
       createdAt: new Date().toISOString(),
+      totalCl: data.totalCl || 0,
+      remainingCl: data.remainingCl || data.totalCl || 0,
+      branchId: data.branchId || null,
     };
 
     try {
@@ -163,9 +169,17 @@ export function AuthProvider({ children }) {
   }
 
   async function deleteUser(userId) {
-    const updatedUsers = users.filter(u => u.id !== userId);
-    setUsers(updatedUsers);
-    await api.users.delete(userId);
+    const originalUsers = [...users];
+    // Optimistic update
+    setUsers(users.filter(u => u.id !== userId));
+    
+    try {
+      await api.users.delete(userId);
+    } catch (err) {
+      // Rollback if server fail
+      setUsers(originalUsers);
+      throw err;
+    }
   }
 
   async function updateUser(userId, updates) {

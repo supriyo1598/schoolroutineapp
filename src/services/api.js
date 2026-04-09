@@ -55,7 +55,10 @@ const api = {
             const mapped = data.map(u => ({
               ...u,
               assignedClasses: u.assigned_classes || [],
-              createdAt: u.created_at
+              createdAt: u.created_at,
+              totalCl: u.total_cl || 0,
+              remainingCl: u.remaining_cl || 0,
+              branchId: u.branch_id
             }));
             // Update local cache with latest from server
             localStorage.setItem('srs_users', JSON.stringify(mapped));
@@ -84,7 +87,10 @@ const api = {
             subjects: u.subjects,
             classes: u.classes,
             assigned_classes: u.assignedClasses || [],
-            created_at: u.createdAt
+            created_at: u.createdAt,
+            total_cl: u.totalCl || 0,
+            remaining_cl: u.remainingCl || 0,
+            branch_id: u.branchId
           }));
           await sbRequest('users?on_conflict=id', {
             method: 'POST',
@@ -114,7 +120,10 @@ const api = {
           subjects: user.subjects,
           classes: user.classes,
           assigned_classes: user.assignedClasses || [],
-          created_at: user.createdAt
+          created_at: user.createdAt,
+          total_cl: user.totalCl || 0,
+          remaining_cl: user.remainingCl || 0,
+          branch_id: user.branchId
         };
         // Throw error if DB create fails
         return await sbRequest('users', {
@@ -138,6 +147,18 @@ const api = {
            mappedUpdates.created_at = updates.createdAt;
            delete mappedUpdates.createdAt;
          }
+         if (updates.totalCl !== undefined) {
+           mappedUpdates.total_cl = updates.totalCl;
+           delete mappedUpdates.totalCl;
+         }
+         if (updates.remainingCl !== undefined) {
+           mappedUpdates.remaining_cl = updates.remainingCl;
+           delete mappedUpdates.remainingCl;
+         }
+         if (updates.branchId !== undefined) {
+           mappedUpdates.branch_id = updates.branchId;
+           delete mappedUpdates.branchId;
+         }
          // Throw error if DB update fails
          return await sbRequest(`users?id=eq.${id}`, {
            method: 'PATCH',
@@ -154,6 +175,7 @@ const api = {
            return await sbRequest(`users?id=eq.${id}`, { method: 'DELETE' });
          } catch (err) {
            console.error('Supabase user deletion failed:', err);
+           throw err;
          }
        }
     }
@@ -371,7 +393,80 @@ const api = {
        const leaves = await this.getAll();
        localStorage.setItem('srs_leaves', JSON.stringify(leaves.filter(l => l.id !== id)));
     }
+  },
+
+  // --- BRANCHES ---
+  branches: {
+    async getAll() {
+      if (isSupabaseConfigured) {
+        try {
+          const data = await sbRequest('branches?select=*&order=name.asc');
+          if (data) {
+            localStorage.setItem('srs_branches', JSON.stringify(data));
+            return data;
+          }
+        } catch (err) {
+          console.error('Supabase branches fetch failed:', err);
+          throw err;
+        }
+      }
+      return JSON.parse(localStorage.getItem('srs_branches') || '[]');
+    },
+    async create(branch) {
+      if (isSupabaseConfigured) {
+        return await sbRequest('branches', {
+          method: 'POST',
+          body: JSON.stringify(branch),
+        });
+      }
+      const branches = await this.getAll();
+      localStorage.setItem('srs_branches', JSON.stringify([...branches, branch]));
+    },
+    async update(id, updates) {
+      if (isSupabaseConfigured) {
+        return await sbRequest(`branches?id=eq.${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(updates),
+        });
+      }
+      const branches = await this.getAll();
+      const updated = branches.map(b => b.id === id ? { ...b, ...updates } : b);
+      localStorage.setItem('srs_branches', JSON.stringify(updated));
+    },
+    async delete(id) {
+      if (isSupabaseConfigured) {
+        return await sbRequest(`branches?id=eq.${id}`, { method: 'DELETE' });
+      }
+      const branches = await this.getAll();
+      localStorage.setItem('srs_branches', JSON.stringify(branches.filter(b => b.id !== id)));
+    }
+  },
+
+  // --- ATTENDANCE ---
+  attendance: {
+    async getByDate(date) {
+      if (isSupabaseConfigured) {
+        return await sbRequest(`attendance?date=eq.${date}&select=*`);
+      }
+      return [];
+    },
+    async getForTeacher(teacherId, month) {
+      // month format: YYYY-MM
+      if (isSupabaseConfigured) {
+        return await sbRequest(`attendance?teacher_id=eq.${teacherId}&date=like.${month}%&select=*`);
+      }
+      return [];
+    },
+    async mark(record) {
+      if (isSupabaseConfigured) {
+        return await sbRequest('attendance', {
+          method: 'POST',
+          body: JSON.stringify(record),
+        });
+      }
+    }
   }
 };
+
 
 export default api;

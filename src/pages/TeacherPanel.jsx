@@ -5,6 +5,10 @@ import { DAYS } from '../utils/constants';
 import { useNotification } from '../context/NotificationContext';
 import { useLeave } from '../context/LeaveContext';
 import { exportTeacherTimetablePDF } from '../utils/exportUtils';
+import { isWithinRadius, isLate } from '../utils/locationUtils';
+import api from '../services/api';
+import { useEffect } from 'react';
+
 
 export default function TeacherPanel() {
   const { currentUser, logout } = useAuth();
@@ -18,6 +22,25 @@ export default function TeacherPanel() {
   const [leaveDate, setLeaveDate] = useState('');
   const [documentLink, setDocumentLink] = useState('');
   const [submittingLeave, setSubmittingLeave] = useState(false);
+  const [markingAttendance, setMarkingAttendance] = useState(false);
+  const [branch, setBranch] = useState(null);
+  const [attendanceToday, setAttendanceToday] = useState(null);
+
+  useEffect(() => {
+    if (currentUser?.branchId) {
+      api.branches.getAll().then(branches => {
+        const myBranch = branches.find(b => b.id === currentUser.branchId);
+        setBranch(myBranch);
+      });
+    }
+    // Check if already marked today
+    const today = new Date().toISOString().split('T')[0];
+    api.attendance.getForTeacher(currentUser.id, today.substring(0, 7)).then(logs => {
+      const todayLog = logs.find(l => l.date === today);
+      setAttendanceToday(todayLog);
+    });
+  }, [currentUser]);
+
 
   const notifications = getTeacherNotifications(currentUser?.id);
   const unreadCount = notifications.filter(n => n.unread).length;
@@ -81,6 +104,10 @@ export default function TeacherPanel() {
             <span className="nav-icon">🌴</span>
             <span className="nav-label">Apply for Leave</span>
           </button>
+          <button className={`nav-item ${activeTab === 'attendance' ? 'active' : ''}`} onClick={() => setActiveTab('attendance')}>
+            <span className="nav-icon">📝</span>
+            <span className="nav-label">Attendance & CL</span>
+          </button>
         </nav>
         <div className="sidebar-footer">
           <div className="user-info">
@@ -110,6 +137,10 @@ export default function TeacherPanel() {
         <button className={`mobile-nav-item ${activeTab === 'leave' ? 'active' : ''}`} onClick={() => setActiveTab('leave')}>
           <span className="nav-icon">🌴</span>
           <span className="nav-label">Leave</span>
+        </button>
+        <button className={`mobile-nav-item ${activeTab === 'attendance' ? 'active' : ''}`} onClick={() => setActiveTab('attendance')}>
+          <span className="nav-icon">📝</span>
+          <span className="nav-label">Attendance</span>
         </button>
       </nav>
 
@@ -303,6 +334,109 @@ export default function TeacherPanel() {
                   </table>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        {activeTab === 'attendance' && (
+          <div className="tab-content">
+            <div className="tab-header">
+              <h2>Attendance & Casual Leave</h2>
+              <p className="tab-desc">Mark your daily presence and track your leave balance.</p>
+            </div>
+
+            <div className="two-col-grid">
+              <div className="section-card">
+                <h3>Leave Balance</h3>
+                <div className="cl-balance-card">
+                  <div className="cl-balance-main">
+                    <span className="cl-value">{currentUser.remainingCl || 0}</span>
+                    <span className="cl-label">Remaining CL</span>
+                  </div>
+                  <div className="cl-total">Out of {currentUser.totalCl || 0} Total</div>
+                </div>
+                <div className="branch-info-card mt-4">
+                  <strong>Assigned Branch:</strong>
+                  <div>{branch?.name || (currentUser.branchId ? 'Loading...' : 'Not Assigned')}</div>
+                  {branch && <div className="text-xs text-dim">Location: {branch.latitude}, {branch.longitude}</div>}
+                </div>
+              </div>
+
+              <div className="section-card">
+                <h3>Today's Attendance</h3>
+                {attendanceToday ? (
+                  <div className="attendance-status-card success">
+                    <div className="status-icon">✅</div>
+                    <div>
+                      <div className="status-title">Marked as {attendanceToday.status.toUpperCase()}</div>
+                      <div className="status-time">At {attendanceToday.time}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="attendance-mark-box">
+                    <p className="text-sm mb-4">You must be at the school location to mark your attendance.</p>
+                    <button 
+                      className="btn-primary w-full" 
+                      disabled={markingAttendance || !branch}
+                      onClick={async () => {
+                        if (!branch) return showToast('Contact admin to assign a branch.', 'warning');
+                        setMarkingAttendance(true);
+                        
+                        navigator.geolocation.getCurrentPosition(async (pos) => {
+                          const { latitude, longitude } = pos.coords;
+                          
+                          if (!isWithinRadius(branch.latitude, branch.longitude, latitude, longitude, 200)) {
+                            showToast('You are outside the school location.', 'error');
+                            setMarkingAttendance(false);
+                            return;
+                          }
+
+                          const now = new Date();
+                          const currentTime = now.toTimeString().split(' ')[0]; // HH:MM:SS
+                          const status = isLate(currentTime, branch.late_threshold) ? 'late' : 'present';
+                          
+                          const record = {
+                            id: 'att_' + Date.now(),
+                            teacher_id: currentUser.id,
+                            branch_id: branch.id,
+                            date: now.toISOString().split('T')[0],
+                            time: currentTime,
+                            status,
+                            latitude,
+                            longitude
+                          };
+
+                          try {
+                            await api.attendance.mark(record);
+                            setAttendanceToday(record);
+                            showToast(`Attendance marked as ${status}!`, 'success');
+
+                            // Deduct CL if 3rd late
+                            if (status === 'late') {
+                               const month = now.toISOString().substring(0, 7);
+                               const monthLogs = await api.attendance.getForTeacher(currentUser.id, month);
+                               const lates = monthLogs.filter(l => l.status === 'late').length;
+                               if (lates > 0 && lates % 3 === 0) {
+                                  const newRemaining = Math.max(0, (currentUser.remainingCl || 0) - 1);
+                                  await api.users.update(currentUser.id, { remainingCl: newRemaining });
+                                  showToast('1 CL deducted for 3 late attendances this month.', 'info');
+                               }
+                            }
+                          } catch (err) {
+                            showToast('Failed to mark attendance.', 'error');
+                          } finally {
+                            setMarkingAttendance(false);
+                          }
+                        }, () => {
+                          showToast('Please enable GPS to mark attendance.', 'error');
+                          setMarkingAttendance(false);
+                        });
+                      }}
+                    >
+                      {markingAttendance ? 'Checking Location...' : '📍 Mark Present'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

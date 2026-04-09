@@ -1,12 +1,16 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
+import { useAuth } from './AuthContext';
+
 
 const LeaveContext = createContext(null);
 
 export function LeaveProvider({ children }) {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { updateUser, users } = useAuth();
+
 
   const refreshLeaves = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -57,15 +61,26 @@ export function LeaveProvider({ children }) {
 
   async function updateLeaveStatus(leaveId, status) {
     const oldLeaves = [...leaves];
+    const leaf = leaves.find(l => l.id === leaveId);
     setLeaves(prev => prev.map(l => l.id === leaveId ? { ...l, status } : l));
     
     try {
       await api.leaves.update(leaveId, { status });
+      
+      // If approved, deduct 1 CL from teacher
+      if (status === 'approved' && leaf) {
+        const teacher = users.find(u => u.id === leaf.teacher_id);
+        if (teacher) {
+          const newRemaining = Math.max(0, (teacher.remainingCl || 0) - 1);
+          await updateUser(teacher.id, { remainingCl: newRemaining });
+        }
+      }
     } catch (err) {
       setLeaves(oldLeaves);
       throw err;
     }
   }
+
 
   return (
     <LeaveContext.Provider value={{
