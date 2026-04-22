@@ -1,10 +1,10 @@
 // Auto-substitution engine
-// Given an absent teacher and a day, finds all their periods and suggests substitutes
+// Given an absent teacher, day (of week), date (YYYY-MM-DD), finds all their periods and suggests substitutes
 
-export function findSubstitutes(absentTeacherId, day, schedule, teachers, substitutions = {}) {
+export function findSubstitutes(absentTeacherId, day, date, schedule, teachers, substitutions = {}) {
   const slots = [];
 
-  // Find all slots this teacher has on this day
+  // Find all slots this teacher has on this day (schedule is keyed by day-of-week)
   for (const compositeId of Object.keys(schedule)) {
     const daySchedule = schedule[compositeId]?.[day] || {};
     for (const periodId of Object.keys(daySchedule)) {
@@ -13,7 +13,7 @@ export function findSubstitutes(absentTeacherId, day, schedule, teachers, substi
         const assignments = Array.isArray(slot) ? slot : [slot];
         const match = assignments.find(a => a.teacherId === absentTeacherId);
         if (match) {
-          slots.push({ classId: compositeId, day, periodId, subject: match.subject, currentTeacherId: absentTeacherId });
+          slots.push({ classId: compositeId, day, date, periodId, subject: match.subject, currentTeacherId: absentTeacherId });
         }
       }
     }
@@ -27,20 +27,20 @@ export function findSubstitutes(absentTeacherId, day, schedule, teachers, substi
     
     for (const compositeId of Object.keys(schedule)) {
       if (!compositeId.startsWith(baseClassId)) continue;
-      
       const classSchedule = schedule[compositeId] || {};
       for (const d of Object.keys(classSchedule)) {
         for (const p of Object.keys(classSchedule[d])) {
           const s = classSchedule[d][p];
           if (s) {
             const arr = Array.isArray(s) ? s : [s];
-            arr.forEach(a => {
-              if (a.teacherId) classTeachers.add(a.teacherId);
-            });
+            arr.forEach(a => { if (a.teacherId) classTeachers.add(a.teacherId); });
           }
         }
       }
     }
+
+    // Substitutions are stored by date (YYYY-MM-DD), with fallback to day name for legacy data
+    const activeSubs = substitutions[date] || substitutions[day] || {};
 
     // Consider ALL approved teachers (except the absent one)
     const sorted = teachers.filter(t => t.id !== absentTeacherId)
@@ -57,36 +57,30 @@ export function findSubstitutes(absentTeacherId, day, schedule, teachers, substi
             }
           }
         }
-        // Count periods today in active substitutions
-        const daySubs = substitutions[day] || {};
-        for (const classId of Object.keys(daySubs)) {
-          for (const pId of Object.keys(daySubs[classId])) {
-            const subsArray = Array.isArray(daySubs[classId][pId]) ? daySubs[classId][pId] : [daySubs[classId][pId]];
+        // Count periods today in active substitutions (date-keyed)
+        for (const classId of Object.keys(activeSubs)) {
+          for (const pId of Object.keys(activeSubs[classId])) {
+            const subsArray = Array.isArray(activeSubs[classId][pId]) ? activeSubs[classId][pId] : [activeSubs[classId][pId]];
             if (subsArray.some(sub => sub.substituteId === t.id)) count++;
           }
         }
 
-        // Check availability this period
+        // Check availability this period in original schedule
         let busy = false;
         for (const compositeId of Object.keys(schedule)) {
           const s = schedule[compositeId]?.[day]?.[slot.periodId];
           if (s) {
             const arr = Array.isArray(s) ? s : [s];
-            if (arr.some(a => a.teacherId === t.id)) {
-              busy = true;
-              break;
-            }
+            if (arr.some(a => a.teacherId === t.id)) { busy = true; break; }
           }
         }
+        // Check if already assigned as substitute for this period on this date
         if (!busy) {
-          for (const compositeId of Object.keys(daySubs)) {
-            const subPeriods = daySubs[compositeId][slot.periodId];
+          for (const compositeId of Object.keys(activeSubs)) {
+            const subPeriods = activeSubs[compositeId]?.[slot.periodId];
             if (subPeriods) {
               const arr = Array.isArray(subPeriods) ? subPeriods : [subPeriods];
-              if (arr.some(sub => sub.substituteId === t.id)) {
-                busy = true;
-                break;
-              }
+              if (arr.some(sub => sub.substituteId === t.id)) { busy = true; break; }
             }
           }
         }
@@ -97,30 +91,21 @@ export function findSubstitutes(absentTeacherId, day, schedule, teachers, substi
         let matchRank = 4; // Default: General
         let matchType = 'Available (General)';
 
-        if (isSubjectMatch && isClassMatch) {
-          matchRank = 0;
-          matchType = 'Subject & Class Expert';
-        } else if (isSubjectMatch) {
-          matchRank = 1;
-          matchType = 'Subject Specialist';
-        } else if (isClassMatch) {
-          matchRank = 2;
-          matchType = 'Class Teacher';
-        }
+        if (isSubjectMatch && isClassMatch) { matchRank = 0; matchType = 'Subject & Class Expert'; }
+        else if (isSubjectMatch) { matchRank = 1; matchType = 'Subject Specialist'; }
+        else if (isClassMatch) { matchRank = 2; matchType = 'Class Teacher'; }
 
         return { teacher: t, periodsToday: count, busy, matchType, matchRank };
       })
       .filter(c => !c.busy)
       .sort((a, b) => {
-        // First by expertise rank
         if (a.matchRank !== b.matchRank) return a.matchRank - b.matchRank;
-        // Then by load balancing (fewer periods first)
         return a.periodsToday - b.periodsToday;
       });
 
     return {
       ...slot,
-      suggestions: sorted.slice(0, 20), // Show up to 20 options
+      suggestions: sorted.slice(0, 20),
       selectedSubstitute: sorted[0]?.teacher?.id || null,
     };
   });

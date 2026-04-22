@@ -7,13 +7,15 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const isSupabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-// Helper for Supabase requests
+// Helper for Supabase requests with timeout and logging
 async function sbRequest(path, options = {}) {
-  // Ensure we trim whitespace from env vars
   const cleanUrl = SUPABASE_URL?.trim();
   const cleanKey = SUPABASE_ANON_KEY?.trim();
   
-  if (!cleanUrl) throw new Error('SUPABASE_URL is not defined');
+  if (!cleanUrl) {
+    console.warn('Supabase URL is not configured. Falling back to local storage.');
+    throw new Error('SUPABASE_URL is not defined');
+  }
   
   const url = `${cleanUrl}/rest/v1/${path}`;
   const headers = {
@@ -24,23 +26,38 @@ async function sbRequest(path, options = {}) {
     ...(options.headers || {})
   };
 
-  console.log(`Supabase Request: ${options.method || 'GET'} ${url}`);
+  // Add timeout logic
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.error(`Request timed out: ${url}`);
+    controller.abort();
+  }, 10000); // 10 second timeout
 
-  const response = await fetch(url, { ...options, headers });
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    let errorMessage = 'Supabase request failed';
-    try {
-      const errorJson = JSON.parse(errorText);
-      errorMessage = errorJson.message || errorMessage;
-    } catch {
-      errorMessage = errorText || errorMessage;
+  try {
+    console.log(`📡 Supabase Request: ${options.method || 'GET'} ${url}`);
+    const response = await fetch(url, { 
+      ...options, 
+      headers,
+      signal: controller.signal 
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(errorText || `Status: ${response.status}`);
     }
-    throw new Error(errorMessage);
-  }
 
-  const text = await response.text();
-  return text ? JSON.parse(text) : null;
+    const text = await response.text();
+    const result = text ? JSON.parse(text) : null;
+    console.log(`✅ Supabase Response: ${url}`, result ? 'Data received' : 'No data');
+    return result;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') throw new Error('Request timed out');
+    console.error(`❌ Supabase Error: ${url}`, err.message);
+    throw err;
+  }
 }
 
 const api = {
@@ -120,10 +137,10 @@ const api = {
           subjects: user.subjects,
           classes: user.classes,
           assigned_classes: user.assignedClasses || [],
-          created_at: user.createdAt,
-          total_cl: user.totalCl || 0,
-          remaining_cl: user.remainingCl || 0,
-          branch_id: user.branchId
+          created_at: user.createdAt || new Date().toISOString(),
+          total_cl: user.totalCl ?? 0,
+          remaining_cl: user.remainingCl ?? 0,
+          branch_id: user.branchId || null
         };
         // Throw error if DB create fails
         return await sbRequest('users', {
@@ -139,26 +156,26 @@ const api = {
 
        if (isSupabaseConfigured) {
          const mappedUpdates = { ...updates };
-         if (updates.assignedClasses) {
-           mappedUpdates.assigned_classes = updates.assignedClasses;
-           delete mappedUpdates.assignedClasses;
-         }
-         if (updates.createdAt) {
-           mappedUpdates.created_at = updates.createdAt;
-           delete mappedUpdates.createdAt;
-         }
-         if (updates.totalCl !== undefined) {
-           mappedUpdates.total_cl = updates.totalCl;
-           delete mappedUpdates.totalCl;
-         }
-         if (updates.remainingCl !== undefined) {
-           mappedUpdates.remaining_cl = updates.remainingCl;
-           delete mappedUpdates.remainingCl;
-         }
-         if (updates.branchId !== undefined) {
-           mappedUpdates.branch_id = updates.branchId;
-           delete mappedUpdates.branchId;
-         }
+          if (updates.assignedClasses !== undefined) {
+            mappedUpdates.assigned_classes = updates.assignedClasses;
+            delete mappedUpdates.assignedClasses;
+          }
+          if (updates.createdAt !== undefined) {
+            mappedUpdates.created_at = updates.createdAt;
+            delete mappedUpdates.createdAt;
+          }
+          if (updates.totalCl !== undefined) {
+            mappedUpdates.total_cl = updates.totalCl;
+            delete mappedUpdates.totalCl;
+          }
+          if (updates.remainingCl !== undefined) {
+            mappedUpdates.remaining_cl = updates.remainingCl;
+            delete mappedUpdates.remainingCl;
+          }
+          if (updates.branchId !== undefined) {
+            mappedUpdates.branch_id = updates.branchId;
+            delete mappedUpdates.branchId;
+          }
          // Throw error if DB update fails
          return await sbRequest(`users?id=eq.${id}`, {
            method: 'PATCH',
@@ -235,7 +252,8 @@ const api = {
           throw err; // Fail fast if DB is unreachable
         }
       }
-      return JSON.parse(localStorage.getItem('srs_schedule_data') || 'null');
+      const cached = localStorage.getItem('srs_schedule_data');
+      return cached ? JSON.parse(cached) : {};
     },
     async updateKey(key, value) {
       if (isSupabaseConfigured) {
@@ -454,6 +472,13 @@ const api = {
       // month format: YYYY-MM
       if (isSupabaseConfigured) {
         return await sbRequest(`attendance?teacher_id=eq.${teacherId}&date=like.${month}%&select=*`);
+      }
+      return [];
+    },
+    async getAllForMonth(month) {
+      // month format: YYYY-MM
+      if (isSupabaseConfigured) {
+        return await sbRequest(`attendance?date=like.${month}%&select=*`);
       }
       return [];
     },

@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS public.attendance (
   status TEXT NOT NULL, -- present, late
   latitude FLOAT,
   longitude FLOAT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(teacher_id, date)
 );
 
 -- Enable RLS

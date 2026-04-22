@@ -912,6 +912,11 @@ function LeavesTab() {
   const [checkingSub, setCheckingSub] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedTeacherId, setSelectedTeacherId] = useState(null);
+  const [teacherSearch, setTeacherSearch] = useState('');
+
+
+
 
   const pendingLeaves = leaves.filter(l => l.status === 'pending');
   const pastLeaves = leaves.filter(l => l.status !== 'pending');
@@ -932,8 +937,8 @@ function LeavesTab() {
   async function handleApprove(leave) {
     try {
       await updateLeaveStatus(leave.id, 'approved');
-      await markAbsent(leave.teacher_id, leave.day);
-      await addNotification(leave.teacher_id, `Your leave application for ${leave.day} has been APPROVED.`, 'info');
+      await markAbsent(leave.teacher_id, leave.day, leave.leave_date);
+      await addNotification(leave.teacher_id, `Your leave application for ${leave.leave_date || leave.day} has been APPROVED.`, 'info');
       showToast(`Leave approved for ${leave.teacher_name}. Teacher marked absent.`, 'success');
       setCheckingSub(null);
     } catch (err) {
@@ -943,13 +948,25 @@ function LeavesTab() {
 
   async function handleReject(leave) {
     await updateLeaveStatus(leave.id, 'rejected');
-    await addNotification(leave.teacher_id, `Your leave application for ${leave.day} has been REJECTED.`, 'warning');
+    await addNotification(leave.teacher_id, `Your leave application for ${leave.leave_date || leave.day} has been REJECTED.`, 'warning');
     showToast(`Leave rejected for ${leave.teacher_name}.`, 'info');
     setCheckingSub(null);
   }
 
+  async function handleSchoolDuty(leave) {
+    try {
+      await updateLeaveStatus(leave.id, 'school_duty');
+      await markAbsent(leave.teacher_id, leave.day, leave.leave_date);
+      await addNotification(leave.teacher_id, `Your absence on ${leave.leave_date || leave.day} has been recorded as SCHOOL DUTY (CL not deducted).`, 'info');
+      showToast(`${leave.teacher_name} marked as Absent for School Duty.`, 'success');
+      setCheckingSub(null);
+    } catch (err) {
+      showToast('Action failed: ' + err.message, 'error');
+    }
+  }
+
   function checkSubs(leave) {
-    const subs = findSubstitutes(leave.teacher_id, leave.day, schedule, teachers, substitutions);
+    const subs = findSubstitutes(leave.teacher_id, leave.day, leave.leave_date, schedule, teachers, substitutions);
     setSuggestions(subs);
     setCheckingSub(leave.id);
   }
@@ -995,10 +1012,11 @@ function LeavesTab() {
                     </a>
                   </div>
                 )}
-                <div className="leave-actions">
-                  <button className="btn-sm-outline" onClick={() => checkSubs(l)}>Check Subs</button>
-                  <button className="btn-approve-sm" onClick={() => handleApprove(l)}>Approve</button>
-                  <button className="btn-danger-sm" onClick={() => handleReject(l)}>Reject</button>
+                <div className="leave-actions" style={{ flexWrap: 'wrap' }}>
+                   <button className="btn-sm-outline" onClick={() => checkSubs(l)}>Check Subs</button>
+                   <button className="btn-approve-sm" onClick={() => handleApprove(l)}>Approve</button>
+                   <button className="btn-danger-sm" onClick={() => handleReject(l)}>Reject</button>
+                   <button className="btn-school-duty-sm" onClick={() => handleSchoolDuty(l)}>🏫 School Duty</button>
                 </div>
 
                 {checkingSub === l.id && (
@@ -1029,34 +1047,120 @@ function LeavesTab() {
       </div>
 
       <div className="section-card mt-6">
-        <h3>Leave History</h3>
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr><th>Teacher</th><th>Day / Date</th><th>Document</th><th>Status</th><th>Applied On</th></tr>
-            </thead>
-            <tbody>
-              {pastLeaves.map(l => (
-                <tr key={l.id}>
-                  <td>{l.teacher_name}</td>
-                  <td>
-                    {l.day}
-                    {l.leave_date && <div className="text-xs text-dim">{l.leave_date}</div>}
-                  </td>
-                  <td>
-                    {l.document_link ? (
-                      <a href={l.document_link} target="_blank" rel="noopener noreferrer" className="text-link text-sm">
-                        📄 View
-                      </a>
-                    ) : '—'}
-                  </td>
-                  <td><span className={`badge-${l.status}`}>{l.status.toUpperCase()}</span></td>
-                  <td className="text-sm">{new Date(l.created_at).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h3>{selectedTeacherId ? `Leave Detail: ${teachers.find(t => t.id === selectedTeacherId)?.name}` : 'Leave History Summary'}</h3>
+            <p className="text-sm text-dim">
+              {selectedTeacherId 
+                ? 'Viewing detailed records for this teacher.' 
+                : 'Overview of total leaves taken by all teachers.'}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {!selectedTeacherId && (
+              <div className="form-group" style={{ margin: 0, minWidth: '250px' }}>
+                <input 
+                  type="text" 
+                  placeholder="🔍 Search Teacher Name..."
+                  value={teacherSearch}
+                  onChange={e => setTeacherSearch(e.target.value)}
+                  style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%' }}
+                />
+              </div>
+            )}
+            {selectedTeacherId && (
+              <button className="btn-outline" onClick={() => setSelectedTeacherId(null)}>← Back to Summary</button>
+            )}
+          </div>
         </div>
+
+        {!selectedTeacherId ? (
+          /* SUMMARY VIEW */
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Teacher Name</th>
+                  <th>Total Leaves Taken</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teachers
+                  .filter(t => t.name.toLowerCase().includes(teacherSearch.toLowerCase()))
+                  .map(t => {
+                    const count = pastLeaves.filter(l => l.teacher_id === t.id && l.status !== 'rejected').length;
+                    if (count === 0 && teacherSearch === '') return null; // Only show teachers with leaves unless searching
+                    return (
+                      <tr key={t.id}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div className="teacher-avatar-sm">{t.name[0]}</div>
+                            <strong>{t.name}</strong>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="badge-info" style={{ fontSize: '1rem', padding: '0.2rem 0.6rem' }}>{count} days</span>
+                        </td>
+                        <td>
+                          <button className="btn-sm-outline" onClick={() => setSelectedTeacherId(t.id)}>View Details</button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                  .filter(Boolean)
+                }
+                {teachers.filter(t => t.name.toLowerCase().includes(teacherSearch.toLowerCase())).length === 0 && (
+                  <tr><td colSpan="3" className="empty-hint">No teachers found matching your search.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* DETAIL VIEW */
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Day</th>
+                  <th>Reason</th>
+                  <th>Document</th>
+                  <th>Status</th>
+                  <th>Applied On</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pastLeaves
+                  .filter(l => l.teacher_id === selectedTeacherId)
+                  .map(l => (
+                  <tr key={l.id}>
+                    <td><strong>{l.leave_date || '—'}</strong></td>
+                    <td><span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{l.day}</span></td>
+                    <td>
+                      <div style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal' }}>
+                        {l.reason}
+                      </div>
+                    </td>
+                    <td>
+                      {l.document_link ? (
+                        <a href={l.document_link} target="_blank" rel="noopener noreferrer" className="text-link text-sm">
+                          📄 View
+                        </a>
+                      ) : '—'}
+                    </td>
+                    <td>
+                      <span className={`badge-${l.status}`}>
+                        {l.status === 'school_duty' ? 'SCHOOL DUTY' : l.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="text-sm">{new Date(l.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1135,7 +1239,27 @@ function BranchesTab() {
   const [showModal, setShowModal] = useState(false);
   const [editingBranch, setEditingBranch] = useState(null);
   const [form, setForm] = useState({ name: '', latitude: '', longitude: '', start_time: '08:00', late_threshold: '08:15' });
+  const [fetchingLocation, setFetchingLocation] = useState(false);
   const { showToast } = useNotification();
+
+  const fetchCurrentLocation = () => {
+    setFetchingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm(p => ({
+          ...p,
+          latitude: pos.coords.latitude.toFixed(6),
+          longitude: pos.coords.longitude.toFixed(6)
+        }));
+        setFetchingLocation(false);
+        showToast('Location fetched successfully!', 'success');
+      },
+      (err) => {
+        setFetchingLocation(false);
+        showToast('Failed to fetch location. Please enable GPS.', 'error');
+      }
+    );
+  };
 
   const loadBranches = async () => {
     try {
@@ -1191,6 +1315,16 @@ function BranchesTab() {
                  <label>Branch Name</label>
                  <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Main Campus" />
                </div>
+               <div className="form-group mb-4">
+                  <button 
+                    type="button" 
+                    className={`btn-outline-sm w-full ${fetchingLocation ? 'loading' : ''}`}
+                    onClick={fetchCurrentLocation}
+                    disabled={fetchingLocation}
+                  >
+                    {fetchingLocation ? '📡 Fetching...' : '📍 Get Current coordinates'}
+                  </button>
+                </div>
                <div className="form-row">
                  <div className="form-group">
                    <label>Latitude</label>
@@ -1249,43 +1383,204 @@ function BranchesTab() {
 // ===== Attendance Tab =====
 function AttendanceTab() {
   const [logs, setLogs] = useState([]);
+  const [allLeaves, setAllLeaves] = useState([]);
+  const [reportType, setReportType] = useState('daily'); // 'daily' or 'monthly'
+  const [selectedBranchId, setSelectedBranchId] = useState('all');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [branches, setBranches] = useState([]);
   const { users } = useAuth();
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    api.branches.getAll().then(setBranches);
-    api.attendance.getByDate(date).then(setLogs);
-  }, [date]);
+    async function loadReports() {
+      setLoading(true);
+      try {
+        const [bData, lData] = await Promise.all([
+          api.branches.getAll(),
+          api.leaves.getAll()
+        ]);
+        setBranches(bData);
+        setAllLeaves(lData);
+
+        if (reportType === 'daily') {
+          const logsData = await api.attendance.getByDate(date);
+          setLogs(logsData || []);
+        } else {
+          // Optimized Monthly fetch
+          const monthLogs = await api.attendance.getAllForMonth(month);
+          const aggregated = branchTeachers.map(t => {
+            const tLogs = (monthLogs || []).filter(l => l.teacher_id === t.id);
+            const lates = tLogs.filter(l => l.status === 'late');
+            const leavesCount = lData.filter(lv => 
+              lv.teacher_id === t.id && 
+              lv.leave_date.startsWith(month) && 
+              lv.status === 'approved'
+            ).length;
+
+            return {
+              name: t.name,
+              lateDays: lates.map(l => ({ date: l.date, time: l.time })),
+              leaveCount: leavesCount,
+              totalLates: lates.length
+            };
+          });
+          setMonthlyData(aggregated);
+        }
+      } catch (err) {
+        console.error('Failed to load attendance report:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadReports();
+  }, [date, month, reportType, selectedBranchId]);
+
+  const branchTeachers = users.filter(u => 
+    u.role === 'teacher' && 
+    (selectedBranchId === 'all' || u.branchId === selectedBranchId)
+  );
+
+  const getDailyReport = () => {
+    return branchTeachers.map(teacher => {
+      const log = logs.find(l => l.teacher_id === teacher.id);
+      const leave = allLeaves.find(lv => 
+        lv.teacher_id === teacher.id && 
+        lv.leave_date === date && 
+        lv.status === 'approved'
+      );
+      
+      let status = 'absent';
+      let arrivalTime = '—';
+      
+      if (log) {
+        status = log.status || 'present';
+        arrivalTime = log.time;
+      } else if (leave) {
+        status = 'leave';
+      }
+      
+      return { name: teacher.name, arrivalTime, status, branchId: teacher.branchId };
+    });
+  };
+
+  const [monthlyData, setMonthlyData] = useState([]);
+  const reportData = reportType === 'daily' ? getDailyReport() : monthlyData;
 
   return (
     <div className="tab-content">
-      <div className="tab-header">
-        <h2>Attendance Logs</h2>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="class-select" />
+      <div className="tab-header flex-col md:flex-row gap-4 items-start md:items-center">
+        <div className="flex items-center gap-4">
+          <h2>Attendance Report</h2>
+          <div className="toggle-group">
+            <button 
+              className={`btn-toggle ${reportType === 'daily' ? 'active' : ''}`}
+              onClick={() => setReportType('daily')}
+            >Daily</button>
+            <button 
+              className={`btn-toggle ${reportType === 'monthly' ? 'active' : ''}`}
+              onClick={() => setReportType('monthly')}
+            >Monthly</button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 items-center">
+          <select 
+            value={selectedBranchId} 
+            onChange={e => setSelectedBranchId(e.target.value)}
+            className="class-select"
+          >
+            <option value="all">All Branches</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+
+          {reportType === 'daily' ? (
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="class-select" />
+          ) : (
+            <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="class-select" />
+          )}
+        </div>
       </div>
 
       <div className="section-card">
-        <div className="table-container">
-          <table className="data-table">
-            <thead><tr><th>Teacher</th><th>Branch</th><th>Time</th><th>Status</th></tr></thead>
-            <tbody>
-              {logs.length === 0 && <tr><td colSpan={4} className="empty-row">No attendance records for this date.</td></tr>}
-              {logs.map(l => {
-                const teacher = users.find(u => u.id === l.teacher_id);
-                const branch = branches.find(b => b.id === l.branch_id);
-                return (
-                  <tr key={l.id}>
-                    <td><strong>{teacher?.name || l.teacher_id}</strong></td>
-                    <td>{branch?.name || 'Unknown'}</td>
-                    <td>{l.time}</td>
-                    <td><span className={`status-badge badge-${l.status}`}>{l.status}</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {loading ? (
+          <div className="p-8 text-center text-slate-500">⏳ Loading report data...</div>
+        ) : (
+          <div className="table-container">
+            <table className="data-table">
+              {reportType === 'daily' ? (
+                <>
+                  <thead>
+                    <tr>
+                      <th>Teacher Name</th>
+                      <th>Branch</th>
+                      <th>Arrival Time</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.length === 0 && <tr><td colSpan={4} className="empty-row">No teachers found in this branch.</td></tr>}
+                    {reportData.map((row, i) => {
+                      const branch = branches.find(b => b.id === row.branchId);
+                      return (
+                        <tr key={i}>
+                          <td><strong>{row.name}</strong></td>
+                          <td>{branch?.name || '—'}</td>
+                          <td>{row.arrivalTime}</td>
+                          <td>
+                            <span className={`status-badge badge-${row.status}`}>
+                              {row.status === 'present' ? 'Present' : 
+                               row.status === 'late' ? 'Late' : 
+                               row.status === 'leave' ? 'On Leave' : 'Absent'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </>
+              ) : (
+                <>
+                  <thead>
+                    <tr>
+                      <th>Teacher Name</th>
+                      <th>Late (Days & Time)</th>
+                      <th>Leave Count</th>
+                      <th>Summary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.length === 0 && <tr><td colSpan={4} className="empty-row">No teachers found in this branch.</td></tr>}
+                    {reportData.map((row, i) => (
+                      <tr key={i}>
+                        <td><strong>{row.name}</strong></td>
+                        <td>
+                          {row.totalLates > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {row.lateDays.map((d, di) => (
+                                <span key={di} className="text-xs bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
+                                  {d.date.slice(-2)}: {d.time.slice(0,5)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : '—'}
+                        </td>
+                        <td>{row.leaveCount}</td>
+                        <td>
+                          {row.totalLates === 0 && row.leaveCount === 0 ? (
+                            <span className="text-emerald-600 font-medium text-sm">Perfect Attendance! (No leave taken)</span>
+                          ) : (
+                            <span className="text-slate-500 text-sm">{row.totalLates} Late, {row.leaveCount} Leave</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </>
+              )}
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

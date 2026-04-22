@@ -36,12 +36,25 @@ const INITIAL_STATE = {
   subjects: DEFAULT_SUBJECTS,
   isLocked: false,
   schedule: {},
-  substitutions: {},
-  absentTeachers: [],
+  substitutions: {},   // { [date: YYYY-MM-DD]: { [classId]: { [periodId]: [...subs] } } }
+  absentTeachers: [],  // { teacherId, day, date }
   lastChangedClassId: null,
   lastChangeType: null,
   lastChangeId: null,
 };
+
+// Helper: get YYYY-MM-DD for a given day name in the current week
+function getThisWeekDate(dayName) {
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const today = new Date();
+  const todayDay = today.getDay();
+  const targetDay = dayNames.indexOf(dayName);
+  if (targetDay === -1) return null;
+  const diff = targetDay - todayDay;
+  const target = new Date(today);
+  target.setDate(today.getDate() + diff);
+  return target.toISOString().split('T')[0];
+}
 
 function reducer(state, action) {
   switch (action.type) {
@@ -53,9 +66,7 @@ function reducer(state, action) {
       const assignments = existing 
         ? (Array.isArray(existing) ? existing : [existing])
         : [];
-      
       const newAssignments = [...assignments, { teacherId, subject }];
-
       return {
         ...state,
         lastChangedClassId: classId,
@@ -77,21 +88,16 @@ function reducer(state, action) {
       const { classId, day, periodId, teacherId } = action.payload;
       const existing = state.schedule[classId]?.[day]?.[periodId];
       if (!existing) return state;
-
       const assignments = Array.isArray(existing) ? existing : [existing];
-      
-      // If teacherId is provided, remove only that one
       const updatedAssignments = teacherId 
         ? assignments.filter(a => a.teacherId !== teacherId)
         : [];
-
       const daySchedule = { ...(state.schedule[classId]?.[day] || {}) };
       if (updatedAssignments.length === 0) {
         delete daySchedule[periodId];
       } else {
         daySchedule[periodId] = updatedAssignments;
       }
-
       return {
         ...state,
         lastChangedClassId: classId,
@@ -110,37 +116,42 @@ function reducer(state, action) {
       return { ...state, lastChangedClassId: classId, lastChangeType: 'class', lastChangeId: Date.now(), schedule: updated };
     }
     case 'MARK_ABSENT': {
-      const { teacherId, day } = action.payload;
-      const exists = state.absentTeachers.find(a => a.teacherId === teacherId && a.day === day);
+      // date is required; day is derived from date
+      const { teacherId, day, date } = action.payload;
+      const exists = state.absentTeachers.find(a => a.teacherId === teacherId && a.date === date);
       if (exists) return state;
-      return { ...state, lastChangeType: 'absent', lastChangeId: Date.now(), absentTeachers: [...state.absentTeachers, { teacherId, day }] };
-    }
-    case 'MARK_PRESENT': {
-      const { teacherId, day } = action.payload;
       return {
         ...state,
         lastChangeType: 'absent',
         lastChangeId: Date.now(),
-        absentTeachers: state.absentTeachers.filter(a => !(a.teacherId === teacherId && a.day === day)),
+        absentTeachers: [...state.absentTeachers, { teacherId, day, date }],
+      };
+    }
+    case 'MARK_PRESENT': {
+      const { teacherId, date } = action.payload;
+      return {
+        ...state,
+        lastChangeType: 'absent',
+        lastChangeId: Date.now(),
+        absentTeachers: state.absentTeachers.filter(a => !(a.teacherId === teacherId && a.date === date)),
       };
     }
     case 'ASSIGN_SUBSTITUTE': {
-      const { classId, day, periodId, substituteId, originalTeacherId } = action.payload;
-      const existingSubs = state.substitutions[day]?.[classId]?.[periodId];
+      // date (YYYY-MM-DD) is the key, replacing old day-name key
+      const { classId, date, periodId, substituteId, originalTeacherId } = action.payload;
+      const existingSubs = state.substitutions[date]?.[classId]?.[periodId];
       const subsArray = existingSubs ? (Array.isArray(existingSubs) ? existingSubs : [existingSubs]) : [];
-      
       const updatedSubsArray = [...subsArray.filter(s => s.originalTeacherId !== originalTeacherId), { substituteId, originalTeacherId }];
-
       return {
         ...state,
         lastChangeType: 'substitutions',
         lastChangeId: Date.now(),
         substitutions: {
           ...state.substitutions,
-          [day]: {
-            ...(state.substitutions[day] || {}),
+          [date]: {
+            ...(state.substitutions[date] || {}),
             [classId]: {
-              ...(state.substitutions[day]?.[classId] || {}),
+              ...(state.substitutions[date]?.[classId] || {}),
               [periodId]: updatedSubsArray,
             },
           },
@@ -148,29 +159,26 @@ function reducer(state, action) {
       };
     }
     case 'REMOVE_SUBSTITUTE': {
-      const { classId, day, periodId, substituteId } = action.payload;
-      const existingSubs = state.substitutions[day]?.[classId]?.[periodId];
+      const { classId, date, periodId, substituteId } = action.payload;
+      const existingSubs = state.substitutions[date]?.[classId]?.[periodId];
       if (!existingSubs) return state;
-
       const subsArray = Array.isArray(existingSubs) ? existingSubs : [existingSubs];
       const updatedSubsArray = substituteId 
         ? subsArray.filter(s => s.substituteId !== substituteId)
         : [];
-
-      const updatedClass = { ...(state.substitutions[day]?.[classId] || {}) };
+      const updatedClass = { ...(state.substitutions[date]?.[classId] || {}) };
       if (updatedSubsArray.length === 0) {
         delete updatedClass[periodId];
       } else {
         updatedClass[periodId] = updatedSubsArray;
       }
-
       return {
         ...state,
         lastChangeType: 'substitutions',
         lastChangeId: Date.now(),
         substitutions: {
           ...state.substitutions,
-          [day]: { ...(state.substitutions[day] || {}), [classId]: updatedClass },
+          [date]: { ...(state.substitutions[date] || {}), [classId]: updatedClass },
         },
       };
     }
@@ -192,7 +200,7 @@ function reducer(state, action) {
 export function ScheduleProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
   const [loading, setLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'saving', 'error'
+  const [syncStatus, setSyncStatus] = useState('synced');
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [isFirstLoadDone, setIsFirstLoadDone] = useState(false);
   const { currentUser } = useAuth();
@@ -214,12 +222,12 @@ export function ScheduleProvider({ children }) {
     if (!isSilent) setLoading(true);
     try {
       const data = await api.schedule.get();
-      if (data) {
+      if (data && Object.keys(data).length > 0) {
         dispatch({ type: 'SET_STATE', payload: data });
         setLastSyncTime(new Date());
-        setIsFirstLoadDone(true);
-        setSyncStatus('synced');
       }
+      setIsFirstLoadDone(true);
+      setSyncStatus('synced');
     } catch (err) {
       console.error('Failed to load schedule:', err);
       setSyncStatus('error');
@@ -236,7 +244,7 @@ export function ScheduleProvider({ children }) {
   // Background Polling (30s)
   useEffect(() => {
     const interval = setInterval(() => {
-      if (syncStatus !== 'saving') { // Don't pull while we are pushing
+      if (syncStatus !== 'saving') {
         loadData(true);
       }
     }, 30000);
@@ -250,11 +258,10 @@ export function ScheduleProvider({ children }) {
     return () => window.removeEventListener('focus', handleFocus);
   }, [loadData]);
 
-  // Targeted Sync Worker - Pushes ONLY what changed
+  // Targeted Sync Worker
   useEffect(() => {
     if (!loading && isAdmin && isFirstLoadDone && state.lastChangeId) {
       const { lastChangeType, lastChangedClassId } = state;
-      
       const timer = setTimeout(async () => {
         setSyncStatus('saving');
         try {
@@ -276,7 +283,6 @@ export function ScheduleProvider({ children }) {
           setLastSyncTime(new Date());
         } catch (err) {
           console.error('Granular sync failed:', err);
-          showToast('Sync Error: Failed to save some changes.', 'error');
           setSyncStatus('error');
         }
       }, 1000);
@@ -284,7 +290,7 @@ export function ScheduleProvider({ children }) {
     }
   }, [state.lastChangeId, loading, isAdmin, isFirstLoadDone]);
 
-  // Handle Initial Migration: If new keys don't exist, split old schedule_data
+  // Handle Initial Migration
   useEffect(() => {
     async function migrateIfNeeded() {
       if (!isFirstLoadDone || !isAdmin) return;
@@ -292,14 +298,12 @@ export function ScheduleProvider({ children }) {
         const rows = await api.schedule.getRaw();
         const hasGranular = rows.some(r => r.key.startsWith('sch_cls_'));
         const legacy = rows.find(r => r.key === 'schedule_data');
-        
         if (!hasGranular && legacy?.value?.schedule) {
           console.log('Migrating legacy schedule to granular rows...');
           const sched = legacy.value.schedule;
           for (const classId of Object.keys(sched)) {
             await api.schedule.updateKey(`sch_cls_${classId}`, sched[classId]);
           }
-          // Also migrate configuration
           await api.schedule.updateKey('sch_config', {
             classes: legacy.value.classes || state.classes,
             periods: legacy.value.periods || state.periods,
@@ -330,20 +334,24 @@ export function ScheduleProvider({ children }) {
     dispatch({ type: 'REMOVE_SLOT', payload: { classId, day, periodId, teacherId } });
   }
 
-  function markAbsent(teacherId, day) {
-    dispatch({ type: 'MARK_ABSENT', payload: { teacherId, day } });
+  // markAbsent now requires date; day is auto-derived if not passed
+  function markAbsent(teacherId, day, date) {
+    const resolvedDate = date || getThisWeekDate(day) || new Date().toISOString().split('T')[0];
+    dispatch({ type: 'MARK_ABSENT', payload: { teacherId, day, date: resolvedDate } });
   }
 
-  function markPresent(teacherId, day) {
-    dispatch({ type: 'MARK_PRESENT', payload: { teacherId, day } });
+  // markPresent now removes by date
+  function markPresent(teacherId, date) {
+    dispatch({ type: 'MARK_PRESENT', payload: { teacherId, date } });
   }
 
-  function assignSubstitute(classId, day, periodId, substituteId, originalTeacherId) {
-    dispatch({ type: 'ASSIGN_SUBSTITUTE', payload: { classId, day, periodId, substituteId, originalTeacherId } });
+  // assignSubstitute now uses date as the key
+  function assignSubstitute(classId, date, periodId, substituteId, originalTeacherId) {
+    dispatch({ type: 'ASSIGN_SUBSTITUTE', payload: { classId, date, periodId, substituteId, originalTeacherId } });
   }
 
-  function removeSubstitute(classId, day, periodId, substituteId = null) {
-    dispatch({ type: 'REMOVE_SUBSTITUTE', payload: { classId, day, periodId, substituteId } });
+  function removeSubstitute(classId, date, periodId, substituteId = null) {
+    dispatch({ type: 'REMOVE_SUBSTITUTE', payload: { classId, date, periodId, substituteId } });
   }
 
   function toggleLock() {
@@ -363,16 +371,12 @@ export function ScheduleProvider({ children }) {
     }
   }
 
-  function getEffectiveTeacher(classId, day, periodId) {
-    // This is rarely used directly for multi-assignments now since TimetableGrid computes it,
-    // but just in case we return a general response.
-    const subs = state.substitutions[day]?.[classId]?.[periodId];
+  function getEffectiveTeacher(classId, date, periodId) {
+    // For backward compat, derive day from date if possible
+    const subs = state.substitutions[date]?.[classId]?.[periodId];
     const subsArray = subs ? (Array.isArray(subs) ? subs : [subs]) : [];
-    
-    // First subst found
     if (subsArray.length > 0) return { teacherId: subsArray[0].substituteId, isSubstitute: true, originalTeacherId: subsArray[0].originalTeacherId };
-    
-    const slot = state.schedule[classId]?.[day]?.[periodId];
+    const slot = state.schedule[classId]?.[date]?.[periodId];
     if (slot) {
       const assignments = Array.isArray(slot) ? slot : [slot];
       return assignments.map(a => ({ teacherId: a.teacherId, subject: a.subject, isSubstitute: false }));
@@ -380,8 +384,27 @@ export function ScheduleProvider({ children }) {
     return null;
   }
 
+  // Check absent by day-of-week: checks current week's date (new) AND legacy day-name records
   function isTeacherAbsent(teacherId, day) {
-    return state.absentTeachers.some(a => a.teacherId === teacherId && a.day === day);
+    const thisWeekDate = getThisWeekDate(day);
+    // New format: date-based
+    if (thisWeekDate && state.absentTeachers.some(a => a.teacherId === teacherId && a.date === thisWeekDate)) {
+      return true;
+    }
+    // Legacy format: day-name-based (records that have no date field)
+    return state.absentTeachers.some(a => a.teacherId === teacherId && a.day === day && !a.date);
+  }
+
+  // Check absent by specific date: checks date (new) AND derives day-name for legacy records
+  function isTeacherAbsentOnDate(teacherId, date) {
+    // New format: exact date match
+    if (state.absentTeachers.some(a => a.teacherId === teacherId && a.date === date)) {
+      return true;
+    }
+    // Legacy format: derive day name from date and match on day field
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const derivedDay = dayNames[new Date(date + 'T00:00:00').getDay()];
+    return state.absentTeachers.some(a => a.teacherId === teacherId && a.day === derivedDay && !a.date);
   }
 
   function getTeacherSchedule(teacherId) {
@@ -389,14 +412,11 @@ export function ScheduleProvider({ children }) {
     for (const day of DAYS) {
       result[day] = {};
       
-      // Regular schedule
+      // Regular schedule (keyed by day-of-week)
       for (const compositeKey of Object.keys(state.schedule)) {
-        // Always extract the pure classId (first part before __) so the teacher
-        // view can look it up in the classes array by id to display the name.
         const parts = compositeKey.split('__');
         const classId = parts[0];
         const section = parts[1] || 'A';
-          
         const daySchedule = state.schedule[compositeKey]?.[day] || {};
         for (const periodId of Object.keys(daySchedule)) {
           const slot = daySchedule[periodId];
@@ -411,28 +431,36 @@ export function ScheduleProvider({ children }) {
         }
       }
       
-      // Substitutions
-      for (const compositeId of Object.keys(state.substitutions[day] || {})) {
-        const classSubstitutions = state.substitutions[day][compositeId];
-        const parts = compositeId.split('__');
-        const classId = parts[0];
-        const section = parts[1] || 'A';
-          
-        for (const periodId of Object.keys(classSubstitutions)) {
-          const subs = classSubstitutions[periodId];
-          const subsArray = Array.isArray(subs) ? subs : [subs];
-          for (const sub of subsArray) {
-            if (sub.substituteId === teacherId) {
-              const origSlot = state.schedule[compositeId]?.[day]?.[periodId];
-              const origAssignments = origSlot ? (Array.isArray(origSlot) ? origSlot : [origSlot]) : [];
-              const origAssignment = origAssignments.find(a => a.teacherId === sub.originalTeacherId);
-              if (!result[day][periodId]) result[day][periodId] = [];
-              result[day][periodId].push({
-                classId,
-                section,
-                subject: origAssignment?.subject || '—',
-                isSubstitution: true,
-              });
+      // Substitutions (keyed by date - find today's/this week's date for this day)
+      const thisWeekDate = getThisWeekDate(day);
+      // Check both the date-keyed and day-keyed substitutions for backward compat
+      const keysToCheck = thisWeekDate ? [thisWeekDate, day] : [day];
+      for (const key of keysToCheck) {
+        for (const compositeId of Object.keys(state.substitutions[key] || {})) {
+          const classSubstitutions = state.substitutions[key][compositeId];
+          const parts = compositeId.split('__');
+          const classId = parts[0];
+          const section = parts[1] || 'A';
+          for (const periodId of Object.keys(classSubstitutions)) {
+            const subs = classSubstitutions[periodId];
+            const subsArray = Array.isArray(subs) ? subs : [subs];
+            for (const sub of subsArray) {
+              if (sub.substituteId === teacherId) {
+                const origSlot = state.schedule[compositeId]?.[day]?.[periodId];
+                const origAssignments = origSlot ? (Array.isArray(origSlot) ? origSlot : [origSlot]) : [];
+                const origAssignment = origAssignments.find(a => a.teacherId === sub.originalTeacherId);
+                if (!result[day][periodId]) result[day][periodId] = [];
+                // Avoid duplicates
+                const alreadyAdded = result[day][periodId].some(s => s.isSubstitution && s.classId === classId);
+                if (!alreadyAdded) {
+                  result[day][periodId].push({
+                    classId,
+                    section,
+                    subject: origAssignment?.subject || '—',
+                    isSubstitution: true,
+                  });
+                }
+              }
             }
           }
         }
@@ -459,6 +487,7 @@ export function ScheduleProvider({ children }) {
       saveSchedule,
       getEffectiveTeacher,
       isTeacherAbsent,
+      isTeacherAbsentOnDate,
       getTeacherSchedule,
       DAYS,
     }}>

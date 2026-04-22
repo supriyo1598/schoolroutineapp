@@ -30,7 +30,7 @@ export function calculateDistance(lat1, lon1, lat2, lon2) {
  * @param {number} radiusMeters 
  * @returns {boolean}
  */
-export function isWithinRadius(centerLat, centerLon, pointLat, pointLon, radiusMeters = 200) {
+export function isWithinRadius(centerLat, centerLon, pointLat, pointLon, radiusMeters = 100) {
   const distance = calculateDistance(centerLat, centerLon, pointLat, pointLon);
   return distance <= radiusMeters;
 }

@@ -142,8 +142,8 @@ export function AuthProvider({ children }) {
       classes: data.classes || [],
       assignedClasses: data.assignedClasses || [],
       createdAt: new Date().toISOString(),
-      totalCl: data.totalCl || 0,
-      remainingCl: data.remainingCl || data.totalCl || 0,
+      totalCl: data.totalCl ?? 0,
+      remainingCl: data.remainingCl ?? data.totalCl ?? 0,
       branchId: data.branchId || null,
     };
 
