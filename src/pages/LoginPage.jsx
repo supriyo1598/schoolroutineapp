@@ -71,8 +71,8 @@ export default function LoginPage() {
       </div>
       <div className="login-container">
         <div className="login-brand">
-          <div className="login-logo">📚</div>
-          <h1>SchoolRoutine</h1>
+          <img src="/pwa-logo.png" className="login-logo-img" alt="Logo" style={{ width: '80px', height: '80px', marginBottom: '16px', borderRadius: '16px' }} />
+          <h1>RPB Routine</h1>
           <p>Smart Timetable Management System</p>
         </div>
 

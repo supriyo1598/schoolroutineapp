@@ -1,11 +1,11 @@
 {
-  "name": "School Teacher Portal",
-  "short_name": "Teachers",
+  "name": "RPB Routine",
+  "short_name": "RPBRoutine",
   "description": "Simplified portal for school teachers to manage routine, attendance, and leaves.",
   "start_url": "/teacher.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#4f46e5",
+  "background_color": "#080f1d",
+  "theme_color": "#080f1d",
   "icons": [
     {
       "src": "/pwa-logo.png",

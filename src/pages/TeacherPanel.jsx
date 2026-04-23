@@ -100,12 +100,13 @@ export default function TeacherPanel() {
       {!isMobile && (
         <aside className="app-sidebar">
           <div className="sidebar-brand">
-            <span className="brand-icon">📚</span>
+            <img src="/pwa-logo.png" style={{ width: '40px', height: '40px', borderRadius: '8px' }} alt="Logo" />
             <div>
-              <div className="brand-name">SchoolRoutine</div>
+              <div className="brand-name">RPB Routine</div>
               <div className="brand-role">Teacher Portal</div>
             </div>
           </div>
+
           <nav className="sidebar-nav">
             <button className={`nav-item ${activeTab === 'timetable' ? 'active' : ''}`} onClick={() => setActiveTab('timetable')}>
               <span className="nav-icon">📅</span>
@@ -146,9 +147,10 @@ export default function TeacherPanel() {
       {isMobile && (
         <header className="mobile-header">
           <div className="mobile-brand">
-            <span className="brand-icon">📚</span>
-            <span className="brand-name">RoutineApp</span>
+            <img src="/pwa-logo.png" style={{ width: '32px', height: '32px', borderRadius: '6px' }} alt="Logo" />
+            <span className="brand-name">RPB Routine</span>
           </div>
+
           <button className="mobile-logout-btn" onClick={logout} title="Logout">
             <span className="logout-icon">🚪</span>
             <span className="logout-text">Logout</span>

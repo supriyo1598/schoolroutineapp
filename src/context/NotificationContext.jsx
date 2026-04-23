@@ -51,10 +51,21 @@ export function NotificationProvider({ children }) {
 
     // Trigger System Notification
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification('School Routine Alert', {
-        body: message,
-        icon: '/pwa-logo.png'
-      });
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(registration => {
+          registration.showNotification('RPB Routine Alert', {
+            body: message,
+            icon: '/pwa-logo.png',
+            badge: '/pwa-logo.png',
+            vibrate: [200, 100, 200]
+          });
+        });
+      } else {
+        new Notification('RPB Routine Alert', {
+          body: message,
+          icon: '/pwa-logo.png'
+        });
+      }
     }
   }
 

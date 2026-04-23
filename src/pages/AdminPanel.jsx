@@ -853,9 +853,9 @@ export default function AdminPanel() {
     <div className="app-layout">
       <aside className="app-sidebar">
         <div className="sidebar-brand">
-          <span className="brand-icon">📚</span>
+          <img src="/pwa-logo.png" style={{ width: '40px', height: '40px', borderRadius: '8px' }} alt="Logo" />
           <div className="brand-info">
-            <div className="brand-name">SchoolRoutine</div>
+            <div className="brand-name">RPB Routine</div>
             <div className="brand-role">
               Admin Panel
               <div className={`sync-indicator ${syncStatus}`}>
