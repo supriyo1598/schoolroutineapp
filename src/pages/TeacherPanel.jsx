@@ -12,7 +12,8 @@ import api from '../services/api';
 export default function TeacherPanel() {
   const { currentUser, logout, updateUser } = useAuth();
   const { periods, classes, getTeacherSchedule, isTeacherAbsent } = useSchedule();
-  const { getTeacherNotifications, markAllRead, showToast } = useNotification();
+  const { getTeacherNotifications, markAllRead, showToast, notifPermission, requestNotificationPermission } = useNotification();
+
   const { leaves, applyLeave, loading: leavesLoading } = useLeave();
 
   const [activeTab, setActiveTab] = useState('timetable');
@@ -336,6 +337,23 @@ export default function TeacherPanel() {
               <h2>Notifications</h2>
               <p className="tab-desc">Substitution assignments and important alerts.</p>
             </div>
+
+            {notifPermission !== 'granted' && (
+              <div className="notif-permission-banner">
+                <div className="banner-icon">🔔</div>
+                <div className="banner-text">
+                  <h4>Enable System Alerts?</h4>
+                  <p>Get notified instantly on your phone when you are assigned a substitution.</p>
+                </div>
+                <button className="btn-primary-sm" onClick={() => {
+                  requestNotificationPermission().then(res => {
+                    if (res === 'granted') showToast('Notifications enabled!', 'success');
+                    else if (res === 'denied') showToast('Permission denied. Please check your browser settings.', 'error');
+                  });
+                }}>Enable</button>
+              </div>
+            )}
+
             <div className="notifications-list">
               {notifications.length === 0 ? (
                 <div className="empty-state">

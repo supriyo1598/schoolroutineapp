@@ -8,6 +8,8 @@ export function NotificationProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState([]);
 
+  const [notifPermission, setNotifPermission] = useState(Notification.permission);
+
   // Initial load
   useEffect(() => {
     async function loadData() {
@@ -23,6 +25,13 @@ export function NotificationProvider({ children }) {
     loadData();
   }, []);
 
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) return 'unsupported';
+    const permission = await Notification.requestPermission();
+    setNotifPermission(permission);
+    return permission;
+  };
+
   async function addNotification(teacherId, message, type = 'substitution') {
     const notif = {
       id: 'notif_' + Date.now() + Math.random(),
@@ -35,6 +44,14 @@ export function NotificationProvider({ children }) {
     const updated = [...notifications, notif];
     setNotifications(updated);
     await api.notifications.create(notif);
+
+    // Trigger System Notification
+    if (Notification.permission === 'granted') {
+      new Notification('School Routine Alert', {
+        body: message,
+        icon: '/pwa-logo.png'
+      });
+    }
   }
 
   async function markRead(notifId) {
@@ -70,6 +87,7 @@ export function NotificationProvider({ children }) {
     <NotificationContext.Provider value={{
       notifications, loading, addNotification, markRead, markAllRead,
       getTeacherNotifications, toasts, showToast, dismissToast,
+      notifPermission, requestNotificationPermission
     }}>
       {children}
     </NotificationContext.Provider>
