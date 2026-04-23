@@ -238,26 +238,28 @@ export default function TeacherPanel() {
             <h1>Hello, {currentUser?.name?.[0]?.toUpperCase() + currentUser?.name?.slice(1)}! 👋</h1>
             <p>Have a beautiful and productive day today.</p>
           </div>
-          <div className="greeting-date">
-            <span className="day-name">{selectedDay}</span>
-            <span className="full-date">{new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>
-          </div>
-          {deferredPrompt && !isInstalled && (
-            <div className="install-banner-inline">
-              <button 
-                className="btn-install-pwa" 
-                onClick={async () => {
-                  if (deferredPrompt) {
-                    deferredPrompt.prompt();
-                    const { outcome } = await deferredPrompt.userChoice;
-                    if (outcome === 'accepted') setDeferredPrompt(null);
-                  }
-                }}
-              >
-                📲 Install App
-              </button>
+          <div className="greeting-right-col">
+            <div className="greeting-date">
+              <span className="day-name">{selectedDay}</span>
+              <span className="full-date">{new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>
             </div>
-          )}
+            {deferredPrompt && !isInstalled && (
+              <div className="install-banner-inline">
+                <button 
+                  className="btn-install-pwa" 
+                  onClick={async () => {
+                    if (deferredPrompt) {
+                      deferredPrompt.prompt();
+                      const { outcome } = await deferredPrompt.userChoice;
+                      if (outcome === 'accepted') setDeferredPrompt(null);
+                    }
+                  }}
+                >
+                  📲 Install App
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {activeTab === 'timetable' && (
