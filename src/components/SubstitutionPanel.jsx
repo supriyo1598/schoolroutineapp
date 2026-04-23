@@ -249,7 +249,7 @@ export default function SubstitutionPanel() {
                 const match = assignments.find(a => a.teacherId === sub.originalTeacherId);
                 const subject = match?.subject || '—';
 
-                entries.push({ classId: compositeId, classDisplayName, periodId, sub, subTeacher, origTeacher, classObj, period, subject });
+                entries.push({ classId: compositeId, classDisplayName, periodId, sub, subTeacher, origTeacher, period, subject });
               }
             }
           }

@@ -32,6 +32,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const result = await login(loginForm.username.trim(), loginForm.password);
+      if (!result.success) {
         if (result.error === 'pending') {
           setPendingMsg(`Hi ${result.user.name}! Your account is pending admin approval.`);
         } else {

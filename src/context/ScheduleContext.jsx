@@ -170,26 +170,38 @@ function reducer(state, action) {
     }
     case 'REMOVE_SUBSTITUTE': {
       const { classId, date, periodId, substituteId } = action.payload;
-      const existingSubs = state.substitutions[date]?.[classId]?.[periodId];
-      if (!existingSubs) return state;
-      const subsArray = Array.isArray(existingSubs) ? existingSubs : [existingSubs];
-      const updatedSubsArray = substituteId 
-        ? subsArray.filter(s => s.substituteId !== substituteId)
-        : [];
-      const updatedClass = { ...(state.substitutions[date]?.[classId] || {}) };
-      if (updatedSubsArray.length === 0) {
-        delete updatedClass[periodId];
-      } else {
-        updatedClass[periodId] = updatedSubsArray;
-      }
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayName = date ? dayNames[new Date(date + 'T00:00:00').getDay()] : null;
+      
+      const newSubs = { ...state.substitutions };
+      
+      // Keys to check and remove from (both date and day name for legacy support)
+      const keys = [date, dayName].filter(Boolean);
+      
+      keys.forEach(key => {
+        const existingSubs = newSubs[key]?.[classId]?.[periodId];
+        if (existingSubs) {
+          const subsArray = Array.isArray(existingSubs) ? existingSubs : [existingSubs];
+          const updatedSubsArray = substituteId 
+            ? subsArray.filter(s => s.substituteId !== substituteId)
+            : [];
+          
+          if (updatedSubsArray.length === 0) {
+            delete newSubs[key][classId][periodId];
+            if (Object.keys(newSubs[key][classId]).length === 0) {
+              delete newSubs[key][classId];
+            }
+          } else {
+            newSubs[key][classId][periodId] = updatedSubsArray;
+          }
+        }
+      });
+
       return {
         ...state,
         lastChangeType: 'substitutions',
         lastChangeId: Date.now(),
-        substitutions: {
-          ...state.substitutions,
-          [date]: { ...(state.substitutions[date] || {}), [classId]: updatedClass },
-        },
+        substitutions: newSubs,
       };
     }
     case 'UPDATE_CLASSES':
