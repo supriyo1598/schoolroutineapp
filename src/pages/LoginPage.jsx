@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 
@@ -9,19 +9,43 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [rememberMe, setRememberMe] = useState(false);
   const [regForm, setRegForm] = useState({ name: '', username: '', password: '', confirmPassword: '', email: '', phone: '' });
   const [pendingMsg, setPendingMsg] = useState('');
+
+  // Load remembered credentials
+  useEffect(() => {
+    const saved = localStorage.getItem('rpb_remembered');
+    if (saved) {
+      try {
+        const { username, password } = JSON.parse(saved);
+        setLoginForm({ username, password });
+        setRememberMe(true);
+      } catch (e) {
+        localStorage.removeItem('rpb_remembered');
+      }
+    }
+  }, []);
 
   async function handleLogin(e) {
     e.preventDefault();
     setLoading(true);
     try {
       const result = await login(loginForm.username.trim(), loginForm.password);
-      if (!result.success) {
         if (result.error === 'pending') {
           setPendingMsg(`Hi ${result.user.name}! Your account is pending admin approval.`);
         } else {
           showToast(result.error, 'error');
+        }
+      } else {
+        // Successful login - handle remember me
+        if (rememberMe) {
+          localStorage.setItem('rpb_remembered', JSON.stringify({ 
+            username: loginForm.username.trim(), 
+            password: loginForm.password 
+          }));
+        } else {
+          localStorage.removeItem('rpb_remembered');
         }
       }
     } catch (err) {
@@ -107,6 +131,17 @@ export default function LoginPage() {
                       value={loginForm.password}
                       onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))}
                     />
+                  </div>
+                  <div className="login-options" style={{ marginBottom: '20px', display: 'flex', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={rememberMe} 
+                        onChange={e => setRememberMe(e.target.checked)} 
+                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      Remember my password
+                    </label>
                   </div>
                   <button type="submit" className="btn-login" disabled={loading}>
                     {loading ? 'Signing in…' : 'Sign In'}
