@@ -65,23 +65,38 @@ export function findSubstitutes(absentTeacherId, day, date, schedule, teachers, 
           }
         }
 
-        // Check availability this period in original schedule
+        // Check availability this period in ORIGINAL REGULAR SCHEDULE
         let busy = false;
+        const dayName = day; // e.g. "Friday"
+        
         for (const compositeId of Object.keys(schedule)) {
-          const s = schedule[compositeId]?.[day]?.[slot.periodId];
+          const s = schedule[compositeId]?.[dayName]?.[slot.periodId];
           if (s) {
             const arr = Array.isArray(s) ? s : [s];
-            if (arr.some(a => a.teacherId === t.id)) { busy = true; break; }
+            if (arr.some(a => a.teacherId === t.id)) { 
+              busy = true; 
+              break; 
+            }
           }
         }
-        // Check if already assigned as substitute for this period on this date
+
+        // Check availability this period in ACTIVE SUBSTITUTIONS for this SPECIFIC DATE
         if (!busy) {
-          for (const compositeId of Object.keys(activeSubs)) {
-            const subPeriods = activeSubs[compositeId]?.[slot.periodId];
-            if (subPeriods) {
-              const arr = Array.isArray(subPeriods) ? subPeriods : [subPeriods];
-              if (arr.some(sub => sub.substituteId === t.id)) { busy = true; break; }
+          // Check both the date key and the day key for substitutions
+          const keysToSearch = [date, day].filter(Boolean);
+          for (const key of keysToSearch) {
+            const daySubs = substitutions[key] || {};
+            for (const compositeId of Object.keys(daySubs)) {
+              const subPeriods = daySubs[compositeId]?.[slot.periodId];
+              if (subPeriods) {
+                const arr = Array.isArray(subPeriods) ? subPeriods : [subPeriods];
+                if (arr.some(sub => sub.substituteId === t.id)) { 
+                  busy = true; 
+                  break; 
+                }
+              }
             }
+            if (busy) break;
           }
         }
 
