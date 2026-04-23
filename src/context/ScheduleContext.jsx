@@ -129,11 +129,21 @@ function reducer(state, action) {
     }
     case 'MARK_PRESENT': {
       const { teacherId, date } = action.payload;
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const derivedDay = date ? dayNames[new Date(date + 'T00:00:00').getDay()] : null;
+      
       return {
         ...state,
         lastChangeType: 'absent',
         lastChangeId: Date.now(),
-        absentTeachers: state.absentTeachers.filter(a => !(a.teacherId === teacherId && a.date === date)),
+        absentTeachers: state.absentTeachers.filter(a => {
+          // If the record has a date, match strictly on date
+          if (a.date) {
+            return !(a.teacherId === teacherId && a.date === date);
+          }
+          // If the record has no date (legacy), match on day name
+          return !(a.teacherId === teacherId && a.day === derivedDay);
+        }),
       };
     }
     case 'ASSIGN_SUBSTITUTE': {

@@ -70,13 +70,16 @@ export default function SubstitutionPanel() {
   async function handleAssignSub(slot, substituteId) {
     if (!substituteId) return;
     const sub = teachers.find(t => t.id === substituteId);
-    const cls = classes.find(c => c.id === slot.classId);
-    const className = cls?.name || slot.classId;
+    const [classIdPart, sectionPart] = slot.classId.includes('__') ? slot.classId.split('__') : [slot.classId, slot.section || ''];
+    const classObj = classes.find(c => c.id === classIdPart);
+    const fullClassDisplayName = sectionPart ? `${classObj?.name || classIdPart} (Section ${sectionPart})` : (classObj?.name || classIdPart);
+    const periodObj = periods.find(p => p.id === slot.periodId);
+    const periodLabel = periodObj?.label || slot.periodId;
 
     await assignSubstitute(slot.classId, selectedDate, slot.periodId, substituteId, slot.currentTeacherId);
     await addNotification(
       substituteId,
-      `You have been assigned as substitute for ${className} ${slot.section || ''} - ${selectedDate} (${selectedDay}) - ${slot.subject} (${slot.periodId}).`
+      `You have been assigned as substitute for ${fullClassDisplayName} - ${selectedDate} (${selectedDay}) - Subject: ${slot.subject} - Period: ${periodLabel}.`
     );
     showToast(`${sub?.name} assigned as substitute. Teacher notified.`, 'success');
   }

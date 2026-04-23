@@ -639,6 +639,28 @@ body {
 
 /* ========= STATUS BADGES ========= */
 .status-badge { display: inline-block; border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.logout-button-sidebar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius);
+  color: #ef4444;
+  font-weight: 600;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.logout-button-sidebar:hover {
+  background: #ef4444;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+.logout-button-sidebar .icon { font-size: 16px; }
 .badge-pending { background: var(--warning-light); color: var(--warning); }
 .badge-approved { background: var(--success-light); color: var(--success); }
 .badge-rejected { background: var(--danger-light); color: var(--danger); }
@@ -1271,9 +1293,11 @@ code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px;
     left: 0;
     right: 0;
     z-index: 1000;
+    padding: 0 8px; /* Added inner padding */
     padding-bottom: env(safe-area-inset-bottom);
-    box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
   }
+
 
   /* Override previous mobile-nav if any */
   .mobile-nav-item {
@@ -1317,6 +1341,28 @@ code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px;
     letter-spacing: 0.2px;
     text-transform: uppercase;
   }
+
+  /* Logout button in Mobile Header */
+  .mobile-logout-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    padding: 6px 12px;
+    border-radius: 10px;
+    color: #ef4444;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .mobile-logout-btn:active {
+    background: #ef4444;
+    color: white;
+    transform: scale(0.95);
+  }
+  .mobile-logout-btn .logout-icon { font-size: 16px; }
+  .mobile-logout-btn .logout-text { font-size: 12px; font-weight: 700; }
+
 
   /* Horizontal Day Switcher */
   .mobile-day-switcher {
@@ -1421,6 +1467,8 @@ code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px;
   .period-time-col .time-start { font-size: 14px; font-weight: 700; color: var(--text-primary); }
   .period-time-col .time-end { font-size: 11px; color: var(--text-muted); }
   .period-time-col .period-label-mini { font-size: 10px; color: var(--primary); font-weight: 700; margin-top: 4px; }
+  .period-time-col .period-label-large { font-size: 20px; font-weight: 800; color: var(--primary); }
+
 
   .period-info-col { flex: 1; display: flex; flex-direction: column; gap: 2px; }
   .period-info-col .subject-name { font-size: 16px; font-weight: 700; color: var(--text-primary); }
@@ -1439,10 +1487,12 @@ code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px;
     display: flex;
     flex-direction: column;
     gap: 20px;
-    box-shadow: var(--shadow);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
     position: relative;
     overflow: hidden;
+    border-color: rgba(255,255,255,0.05); /* Soft border */
   }
+
 
   .at-card-header { display: flex; justify-content: space-between; align-items: flex-start; }
   .at-card-title { display: flex; flex-direction: column; }
@@ -1494,5 +1544,78 @@ code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px;
     border: 1px dashed var(--border);
     margin-top: 20px;
   }
+
+  /* Teacher Greeting Card */
+  .teacher-greeting-card {
+    background: linear-gradient(135deg, var(--bg-card), #1e293b);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    position: relative;
+    overflow: hidden;
+  }
+  .teacher-greeting-card::before {
+    content: '';
+    position: absolute;
+    top: -50px;
+    right: -50px;
+    width: 150px;
+    height: 150px;
+    background: var(--primary);
+    filter: blur(80px);
+    opacity: 0.2;
+    pointer-events: none;
+  }
+  .greeting-content h1 {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    background: linear-gradient(to right, #fff, #94a3b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .greeting-content p {
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+  .greeting-date {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+  }
+  .greeting-date .day-name {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--primary);
+  }
+  .greeting-date .full-date {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  @media (max-width: 480px) {
+    .teacher-greeting-card {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 20px;
+    }
+    .greeting-date {
+      align-items: flex-start;
+      text-align: left;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+      width: 100%;
+    }
+  }
 }
+
 

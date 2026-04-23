@@ -132,8 +132,12 @@ export default function TeacherPanel() {
                 <div className="user-role-label">Teacher</div>
               </div>
             </div>
-            <button className="btn-logout" onClick={logout}>Sign Out</button>
+            <button className="logout-button-sidebar" onClick={logout}>
+              <span className="icon">🚪</span>
+              Sign Out
+            </button>
           </div>
+
         </aside>
       )}
 
@@ -142,13 +146,15 @@ export default function TeacherPanel() {
         <header className="mobile-header">
           <div className="mobile-brand">
             <span className="brand-icon">📚</span>
-            <span className="brand-name">SchoolRoutine</span>
+            <span className="brand-name">RoutineApp</span>
           </div>
-          <button className="mobile-logout" onClick={logout} title="Logout">
-            <span className="nav-icon">🚪</span>
+          <button className="mobile-logout-btn" onClick={logout} title="Logout">
+            <span className="logout-icon">🚪</span>
+            <span className="logout-text">Logout</span>
           </button>
         </header>
       )}
+
 
       {/* Mobile Bottom Navigation */}
       {isMobile && (
@@ -176,6 +182,18 @@ export default function TeacherPanel() {
       )}
 
       <main className="app-main">
+        {/* Personalized Greeting */}
+        <div className="teacher-greeting-card">
+          <div className="greeting-content">
+            <h1>Hello, {currentUser?.name?.[0]?.toUpperCase() + currentUser?.name?.slice(1)}! 👋</h1>
+            <p>Have a beautiful and productive day today.</p>
+          </div>
+          <div className="greeting-date">
+            <span className="day-name">{selectedDay}</span>
+            <span className="full-date">{new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>
+          </div>
+        </div>
+
         {activeTab === 'timetable' && (
           <div className="tab-content">
             {isMobile ? (
@@ -205,20 +223,13 @@ export default function TeacherPanel() {
                   {periods.map(period => {
                     if (period.isBreak) return null;
                     const slots = teacherSchedule[selectedDay]?.[period.id] || [];
-                    const timeParts = (period.time || '').split('-');
-                    const startTime = timeParts[0]?.trim() || '--:--';
-                    const endTime = timeParts[1]?.trim() || '--:--';
-                    
-                    if (slots.length === 0) return null;
-
                     return (
                       <div key={period.id} className="period-card">
                         <div className="period-time-col">
-                          <span className="time-start">{startTime}</span>
-                          <span className="time-end">{endTime}</span>
-                          <span className="period-label-mini">{period.label}</span>
+                          <span className="period-label-large">{period.label}</span>
                         </div>
                         <div className="period-info-col">
+
                           {slots.map((slot, idx) => {
                             const cls = classes.find(c => c.id === slot.classId);
                             return (
@@ -271,9 +282,9 @@ export default function TeacherPanel() {
                         {periods.map(period => (
                           <th key={period.id} className={`day-header ${period.isBreak ? 'break-header' : ''}`}>
                             <div>{period.label}</div>
-                            {period.time && <div className="period-time">{period.time}</div>}
                           </th>
                         ))}
+
                       </tr>
                     </thead>
                     <tbody>

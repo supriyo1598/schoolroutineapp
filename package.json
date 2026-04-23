@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "teacher:dev": "vite --open teacher.html",
     "mobile:sync": "npm run build && npx cap sync android",
     "mobile:open": "npx cap open android"
   },
