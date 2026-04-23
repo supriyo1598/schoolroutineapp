@@ -27,6 +27,10 @@ export function NotificationProvider({ children }) {
       }
     }
     loadData();
+
+    // Background Polling (30s)
+    const interval = setInterval(() => loadData(), 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const requestNotificationPermission = async () => {

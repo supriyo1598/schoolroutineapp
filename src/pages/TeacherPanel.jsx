@@ -107,6 +107,19 @@ export default function TeacherPanel() {
 
   }, [currentUser]);
 
+  const formatNotifMessage = (msg) => {
+    if (!msg) return "";
+    let formatted = msg;
+    const idMatches = msg.match(/cls_[a-zA-Z0-9]+/g);
+    if (idMatches) {
+      idMatches.forEach(id => {
+        const classObj = classes.find(c => c.id === id || id.startsWith(c.id));
+        if (classObj) formatted = formatted.replace(id, classObj.name);
+      });
+    }
+    return formatted.replace(/__/g, ' (Section ').replace(/ - Subject:/g, ' - Subject:').replace(/Period: /g, '');
+  };
+
 
   const notifications = getTeacherNotifications(currentUser?.id);
   const unreadCount = notifications.filter(n => n.unread).length;
@@ -444,7 +457,7 @@ export default function TeacherPanel() {
                   <div key={n.id} className={`notification-item ${n.unread ? 'unread' : ''}`}>
                     <div className="notif-icon">🔄</div>
                     <div className="notif-body">
-                      <p className="notif-message">{n.message}</p>
+                      <p className="notif-message">{formatNotifMessage(n.message)}</p>
                       <span className="notif-time">{new Date(n.timestamp).toLocaleString()}</span>
                     </div>
                     {n.unread && <span className="notif-dot" />}

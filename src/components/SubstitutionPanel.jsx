@@ -16,6 +16,23 @@ function todayDate() {
   return new Date().toISOString().split('T')[0];
 }
 
+// Helper: Robust Class Name Resolution from composite ID (e.g. cls_123__A)
+function getClassDisplayName(compositeId, classes) {
+  let [classIdPart, sectionPart] = compositeId.includes('__') ? compositeId.split('__') : [compositeId, ''];
+  
+  // Try exact ID match
+  let classObj = classes.find(c => c.id === classIdPart);
+  
+  // Fallback: Fuzzy ID match
+  if (!classObj) {
+    classObj = classes.find(c => classIdPart.includes(c.id) || c.id.includes(classIdPart));
+  }
+
+  const className = classObj?.name || classIdPart || "Unknown Class";
+  const sectionDisplay = sectionPart ? ` (Section ${sectionPart})` : "";
+  return `${className}${sectionDisplay}`;
+}
+
 export default function SubstitutionPanel() {
   const {
     schedule, periods, classes, filteredClasses,
@@ -70,16 +87,14 @@ export default function SubstitutionPanel() {
   async function handleAssignSub(slot, substituteId) {
     if (!substituteId) return;
     const sub = teachers.find(t => t.id === substituteId);
-    const [classIdPart, sectionPart] = slot.classId.includes('__') ? slot.classId.split('__') : [slot.classId, slot.section || ''];
-    const classObj = classes.find(c => c.id === classIdPart);
-    const fullClassDisplayName = sectionPart ? `${classObj?.name || classIdPart} (Section ${sectionPart})` : (classObj?.name || classIdPart);
+    const fullClassDisplayName = getClassDisplayName(slot.classId, classes);
     const periodObj = periods.find(p => p.id === slot.periodId);
     const periodLabel = periodObj?.label || slot.periodId;
 
     await assignSubstitute(slot.classId, selectedDate, slot.periodId, substituteId, slot.currentTeacherId);
     await addNotification(
       substituteId,
-      `You have been assigned as substitute for ${fullClassDisplayName} - ${selectedDate} (${selectedDay}) - Subject: ${slot.subject} - Period: ${periodLabel}.`
+      `🔄 Substitution Assigned: You are assigned for ${fullClassDisplayName} on ${selectedDate} (${selectedDay}) - Subject: ${slot.subject} - ${periodLabel}.`
     );
     showToast(`${sub?.name} assigned as substitute. Teacher notified.`, 'success');
   }
@@ -175,9 +190,7 @@ export default function SubstitutionPanel() {
           <div className="suggestions-list">
             {suggestions.map((slot, idx) => {
               const period = periodMap[slot.periodId];
-              const [classId, section] = slot.classId.includes('__') ? slot.classId.split('__') : [slot.classId, ''];
-              const classObj = classes.find(c => c.id === classId);
-              const classDisplayName = section ? `${classObj?.name || classId} (${section})` : (classObj?.name || classId);
+              const classDisplayName = getClassDisplayName(slot.classId, classes);
               const currentOverride = overrides[`${slot.classId}-${slot.periodId}`];
               return (
                 <div key={idx} className="suggestion-card">
@@ -227,9 +240,7 @@ export default function SubstitutionPanel() {
               for (const sub of subsArray) {
                 const subTeacher = teachers.find(t => t.id === sub.substituteId);
                 const origTeacher = teachers.find(t => t.id === sub.originalTeacherId);
-                const [classId, section] = compositeId.includes('__') ? compositeId.split('__') : [compositeId, ''];
-                const classObj = classes.find(c => c.id === classId);
-                const classDisplayName = section ? `${classObj?.name || classId} (${section})` : (classObj?.name || classId);
+                const classDisplayName = getClassDisplayName(compositeId, teachers.length > 0 ? classes : []);
                 const period = periodMap[periodId];
                 
                 // Get subject from original schedule
