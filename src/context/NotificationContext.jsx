@@ -8,7 +8,11 @@ export function NotificationProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState([]);
 
-  const [notifPermission, setNotifPermission] = useState(Notification.permission);
+  const [notifPermission, setNotifPermission] = useState(
+    typeof window !== 'undefined' && 'Notification' in window 
+      ? Notification.permission 
+      : 'unsupported'
+  );
 
   // Initial load
   useEffect(() => {
@@ -46,7 +50,7 @@ export function NotificationProvider({ children }) {
     await api.notifications.create(notif);
 
     // Trigger System Notification
-    if (Notification.permission === 'granted') {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       new Notification('School Routine Alert', {
         body: message,
         icon: '/pwa-logo.png'
