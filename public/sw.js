@@ -6,13 +6,24 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', event => {
+  self.skipWaiting(); // Force update
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
   );
 });
 
+self.addEventListener('activate', event => {
+  event.waitUntil(clients.claim()); // Take control instantly
+});
+
+
 self.addEventListener('fetch', event => {
+  // Bypassing Supabase API calls to prevent CORS issues
+  if (event.request.url.includes('supabase.co')) {
+    return; // Browser will handle this naturally
+  }
+  
   event.respondWith(
     caches.match(event.request)
       .then(response => response || fetch(event.request))

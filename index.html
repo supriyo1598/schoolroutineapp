@@ -8,10 +8,20 @@
     <meta name="theme-color" content="#080f1d" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="description" content="RPB Routine — Smart Timetable Management System. Optimized for teachers and admins." />
+    <link rel="manifest" href="/manifest.json" />
     <title>RPB Routine</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service Worker registered'))
+            .catch(err => console.log('Service Worker registration failed', err));
+        });
+      }
+    </script>
   </body>
 </html>

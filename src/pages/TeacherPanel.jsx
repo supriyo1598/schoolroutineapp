@@ -8,8 +8,10 @@ import { exportTeacherTimetablePDF } from '../utils/exportUtils';
 import { isWithinRadius, isLate } from '../utils/locationUtils';
 import api from '../services/api';
 
+const DAY_MAP = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export default function TeacherPanel() {
+
   const { currentUser, logout, updateUser } = useAuth();
   const { periods, classes, getTeacherSchedule, isTeacherAbsent } = useSchedule();
   const { getTeacherNotifications, markAllRead, showToast, notifPermission, requestNotificationPermission } = useNotification();
@@ -26,23 +28,46 @@ export default function TeacherPanel() {
   const [attendanceToday, setAttendanceToday] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 1024);
   const [selectedDay, setSelectedDay] = useState('Monday');
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 1024);
     window.addEventListener('resize', handleResize);
     
-    // Auto-detect current day
-    const dayIndex = new Date().getDay(); // 0 (Sun) to 6 (Sat)
-    const dayMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const currentDayName = dayMap[dayIndex];
+    // Auto-detect current day and set it
+    const currentDayName = DAY_MAP[new Date().getDay()];
+
     
     if (DAYS.includes(currentDayName)) {
       setSelectedDay(currentDayName);
     } else {
-      setSelectedDay('Monday'); // Default to Monday on weekends
+      setSelectedDay('Monday');
     }
 
-    return () => window.removeEventListener('resize', handleResize);
+
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
   }, []);
 
   useEffect(() => {
@@ -52,12 +77,34 @@ export default function TeacherPanel() {
         setBranch(myBranch);
       });
     }
-    // Check if already marked today
-    const today = new Date().toISOString().split('T')[0];
-    api.attendance.getForTeacher(currentUser.id, today.substring(0, 7)).then(logs => {
-      const todayLog = logs.find(l => l.date === today);
-      setAttendanceToday(todayLog);
+    // Check if already marked today (Safer manual date formatting)
+    const now = new Date();
+    const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    const altTodayStr = now.getFullYear() + '-' + (now.getMonth() + 1) + '-' + now.getDate();
+    const currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    
+    api.attendance.getByDate(todayStr).then(logs => {
+      if (logs && Array.isArray(logs)) {
+        const myLog = logs.find(l => l.teacher_id === currentUser.id);
+        if (myLog) setAttendanceToday(myLog);
+      }
+    }).catch(err => {
+      console.warn('Initial attendance check failed:', err);
+      // Fallback to month check if gte check is better, but getByDate is usually safer
+      api.attendance.getForTeacher(currentUser.id, currentMonthStr).then(logs => {
+        if (logs && Array.isArray(logs)) {
+          const todayLog = logs.find(l => 
+            l.date === todayStr || 
+            l.date === altTodayStr || 
+            l.date?.trim() === todayStr ||
+            new Date(l.date).toLocaleDateString('en-CA') === todayStr
+          );
+          setAttendanceToday(todayLog);
+        }
+      }).catch(e => console.error('All attendance checks failed:', e));
     });
+
+
   }, [currentUser]);
 
 
@@ -195,6 +242,22 @@ export default function TeacherPanel() {
             <span className="day-name">{selectedDay}</span>
             <span className="full-date">{new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>
           </div>
+          {deferredPrompt && !isInstalled && (
+            <div className="install-banner-inline">
+              <button 
+                className="btn-install-pwa" 
+                onClick={async () => {
+                  if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    if (outcome === 'accepted') setDeferredPrompt(null);
+                  }
+                }}
+              >
+                📲 Install App
+              </button>
+            </div>
+          )}
         </div>
 
         {activeTab === 'timetable' && (
@@ -203,20 +266,31 @@ export default function TeacherPanel() {
               <div className="mobile-teacher-view">
                 <div className="tab-header">
                   <h2>My Schedule</h2>
-                  <p className="tab-desc">Auto-detected: Today is {selectedDay}</p>
+                  <p className="tab-desc">Auto-detected: Today is {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                 </div>
 
                 <div className="mobile-day-switcher">
                   {DAYS.map(day => {
-                    const isToday = day === selectedDay;
+                    const isSelected = day === selectedDay;
+                    const isActualToday = day === DAY_MAP[new Date().getDay()];
+                    
+                    // Logic to find the date of 'day' in the current week
+                    const today = new Date();
+                    const currentDayIdx = today.getDay(); // 0-6
+                    const targetDayIdx = DAY_MAP.indexOf(day); // 0-6
+                    const diff = targetDayIdx - currentDayIdx;
+                    const targetDate = new Date(today);
+                    targetDate.setDate(today.getDate() + diff);
+                    
                     return (
                       <div 
                         key={day} 
-                        className={`day-tab ${isToday ? 'active' : ''}`}
+                        className={`day-tab ${isSelected ? 'active' : ''} ${isActualToday ? 'is-today-marker' : ''}`}
                         onClick={() => setSelectedDay(day)}
                       >
+
                         <span className="day-short">{day.substring(0, 3)}</span>
-                        <span className="day-num">{DAYS.indexOf(day) + 1}</span>
+                        <span className="day-num">{targetDate.getDate()}</span>
                       </div>
                     );
                   })}
@@ -523,27 +597,36 @@ export default function TeacherPanel() {
                     <div className="mobile-attendance-card success">
                       <div className="at-card-header">
                         <div className="at-card-title">
-                          <h3>Checked In</h3>
+                          <h3>Check-in Record</h3>
                           <div className="at-location-status in-radius">
                             <span>📍 {branch?.name || 'School Branch'}</span>
                           </div>
                         </div>
                         <span className="status-icon">✅</span>
                       </div>
-                      <div className="at-attendance-meta">
-                        <div className="status-title">Status: {attendanceToday.status.toUpperCase()}</div>
-                        <div className="status-time">Time: {attendanceToday.time}</div>
+                      <div className="at-arrival-summary">
+                        Today you arrived at <span className="time-highlight">{attendanceToday.time}</span>
+                      </div>
+                      <div className={`at-status-pill ${attendanceToday.status}`}>
+                        {attendanceToday.status.toUpperCase()}
                       </div>
                     </div>
+
+
                   ) : (
                     <div className="attendance-status-card success">
                       <div className="status-icon">✅</div>
                       <div>
-                        <div className="status-title">Marked as {attendanceToday.status.toUpperCase()}</div>
-                        <div className="status-time">At {attendanceToday.time}</div>
+                        <h3>Check-in Record</h3>
+                        <div className="at-arrival-summary">
+                          Today you arrived at <span className="time-highlight">{attendanceToday.time}</span> — 
+                          <span className={`status-text ${attendanceToday.status}`}> {attendanceToday.status.toUpperCase()}</span>
+                        </div>
                         <div className="text-xs text-dim mt-1">📍 {branch?.name}</div>
                       </div>
                     </div>
+
+
                   )
                 ) : (
                   isMobile ? (
@@ -562,7 +645,7 @@ export default function TeacherPanel() {
                       
                       <button 
                         className="at-mark-button" 
-                        disabled={markingAttendance || !branch}
+                        disabled={markingAttendance || !branch || !!attendanceToday}
                         onClick={async () => {
                           if (attendanceToday) return;
                           if (!branch) return showToast('Contact admin to assign a branch.', 'warning');
@@ -585,7 +668,7 @@ export default function TeacherPanel() {
                               id: 'att_' + Date.now(),
                               teacher_id: currentUser.id,
                               branch_id: branch.id,
-                              date: now.toLocaleDateString('en-CA'),
+                              date: now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0'),
                               time: currentTime,
                               status,
                               latitude,
@@ -595,7 +678,7 @@ export default function TeacherPanel() {
                             try {
                               await api.attendance.mark(record);
                               setAttendanceToday(record);
-                              showToast(`Checked in successfully as ${status}!`, 'success');
+                              showToast(`Arrived at ${currentTime} - ${status.toUpperCase()}`, 'success');
 
                               if (status === 'late') {
                                  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -609,10 +692,33 @@ export default function TeacherPanel() {
                                  }
                               }
                             } catch (err) {
-                              showToast('System Error: Failed to mark attendance.', 'error');
+                              if (err.message?.includes('23505') || err.message?.includes('duplicate key')) {
+                                showToast('Attendance already marked for today.', 'info');
+                                
+                                // Sync actual record from DB
+                                api.attendance.getByDate(record.date).then(logs => {
+                                  if (logs && Array.isArray(logs)) {
+                                    const actual = logs.find(l => l.teacher_id === currentUser.id);
+                                    if (actual) setAttendanceToday(actual);
+                                  }
+                                }).catch(syncErr => {
+                                  console.warn('Background sync failed:', syncErr);
+                                  // Fallback to month check
+                                  api.attendance.getForTeacher(currentUser.id, record.date.substring(0, 7)).then(logs => {
+                                    if (logs) {
+                                      const actual = logs.find(l => l.date === record.date || l.date?.trim() === record.date);
+                                      if (actual) setAttendanceToday(actual);
+                                    }
+                                  });
+                                });
+                              } else {
+                                showToast('System Error: Failed to mark attendance.', 'error');
+                              }
                             } finally {
                               setMarkingAttendance(false);
                             }
+
+
                           }, (err) => {
                             showToast('GPS Error: Please enable location services.', 'error');
                             setMarkingAttendance(false);
@@ -627,7 +733,7 @@ export default function TeacherPanel() {
                       <p className="text-sm mb-4">You must be at the school location to mark your attendance.</p>
                       <button 
                         className="btn-primary w-full" 
-                        disabled={markingAttendance || !branch}
+                        disabled={markingAttendance || !branch || !!attendanceToday}
                         onClick={async () => {
                           if (attendanceToday) return;
                           if (!branch) return showToast('Contact admin to assign a branch.', 'warning');
@@ -650,7 +756,7 @@ export default function TeacherPanel() {
                               id: 'att_' + Date.now(),
                               teacher_id: currentUser.id,
                               branch_id: branch.id,
-                              date: now.toLocaleDateString('en-CA'),
+                              date: now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0'),
                               time: currentTime,
                               status,
                               latitude,
@@ -660,9 +766,8 @@ export default function TeacherPanel() {
                             try {
                               await api.attendance.mark(record);
                               setAttendanceToday(record);
-                              showToast(`Attendance marked as ${status}!`, 'success');
+                              showToast(`Arrived at ${currentTime} - ${status.toUpperCase()}`, 'success');
 
-                              // Deduct CL if 3rd late
                               if (status === 'late') {
                                  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
                                  const monthLogs = await api.attendance.getForTeacher(currentUser.id, month);
@@ -671,14 +776,37 @@ export default function TeacherPanel() {
                                  if (lates > 0 && lates % 3 === 0) {
                                     const newRemaining = Math.max(0, (currentUser.remainingCl || 0) - 1);
                                     await updateUser(currentUser.id, { remainingCl: newRemaining });
-                                    showToast('1 CL deducted for 3 late attendances this month.', 'info');
+                                    showToast('1 CL deducted for 3 late attendances.', 'info');
                                  }
                               }
                             } catch (err) {
-                              showToast('Failed to mark attendance.', 'error');
+                               if (err.message?.includes('23505') || err.message?.includes('duplicate key')) {
+                                 showToast('Attendance already marked for today.', 'info');
+                                 
+                                 // Sync actual record from DB
+                                 api.attendance.getByDate(record.date).then(logs => {
+                                   if (logs && Array.isArray(logs)) {
+                                     const actual = logs.find(l => l.teacher_id === currentUser.id);
+                                     if (actual) setAttendanceToday(actual);
+                                   }
+                                 }).catch(syncErr => {
+                                   console.warn('Background sync failed:', syncErr);
+                                   // Fallback to month check
+                                   api.attendance.getForTeacher(currentUser.id, record.date.substring(0, 7)).then(logs => {
+                                     if (logs) {
+                                       const actual = logs.find(l => l.date === record.date || l.date?.trim() === record.date);
+                                       if (actual) setAttendanceToday(actual);
+                                     }
+                                   });
+                                 });
+                               } else {
+                                 showToast('Failed to mark attendance.', 'error');
+                               }
                             } finally {
                               setMarkingAttendance(false);
                             }
+
+
                           }, () => {
                             showToast('Please enable GPS to mark attendance.', 'error');
                             setMarkingAttendance(false);

@@ -471,14 +471,14 @@ const api = {
     async getForTeacher(teacherId, month) {
       // month format: YYYY-MM
       if (isSupabaseConfigured) {
-        return await sbRequest(`attendance?teacher_id=eq.${teacherId}&date=like.${month}%&select=*`);
+        return await sbRequest(`attendance?teacher_id=eq.${teacherId}&date=like.${month}${encodeURIComponent('%')}&select=*`);
       }
       return [];
     },
     async getAllForMonth(month) {
       // month format: YYYY-MM
       if (isSupabaseConfigured) {
-        return await sbRequest(`attendance?date=like.${month}%&select=*`);
+        return await sbRequest(`attendance?date=like.${month}${encodeURIComponent('%')}&select=*`);
       }
       return [];
     },
