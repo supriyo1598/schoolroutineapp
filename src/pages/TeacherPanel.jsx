@@ -585,7 +585,7 @@ export default function TeacherPanel() {
                               id: 'att_' + Date.now(),
                               teacher_id: currentUser.id,
                               branch_id: branch.id,
-                              date: now.toISOString().split('T')[0],
+                              date: now.toLocaleDateString('en-CA'),
                               time: currentTime,
                               status,
                               latitude,
@@ -598,8 +598,9 @@ export default function TeacherPanel() {
                               showToast(`Checked in successfully as ${status}!`, 'success');
 
                               if (status === 'late') {
-                                 const month = now.toISOString().substring(0, 7);
+                                 const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
                                  const monthLogs = await api.attendance.getForTeacher(currentUser.id, month);
+
                                  const lates = monthLogs.filter(l => l.status === 'late').length;
                                  if (lates > 0 && lates % 3 === 0) {
                                     const newRemaining = Math.max(0, (currentUser.remainingCl || 0) - 1);
@@ -649,7 +650,7 @@ export default function TeacherPanel() {
                               id: 'att_' + Date.now(),
                               teacher_id: currentUser.id,
                               branch_id: branch.id,
-                              date: now.toISOString().split('T')[0],
+                              date: now.toLocaleDateString('en-CA'),
                               time: currentTime,
                               status,
                               latitude,
@@ -663,8 +664,9 @@ export default function TeacherPanel() {
 
                               // Deduct CL if 3rd late
                               if (status === 'late') {
-                                 const month = now.toISOString().substring(0, 7);
+                                 const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
                                  const monthLogs = await api.attendance.getForTeacher(currentUser.id, month);
+
                                  const lates = monthLogs.filter(l => l.status === 'late').length;
                                  if (lates > 0 && lates % 3 === 0) {
                                     const newRemaining = Math.max(0, (currentUser.remainingCl || 0) - 1);
