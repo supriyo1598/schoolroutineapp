@@ -336,7 +336,19 @@ export function ScheduleProvider({ children }) {
             await api.schedule.updateKey('sch_absent', legacy.value.absentTeachers);
           }
           if (legacy.value.substitutions) {
-            await api.schedule.updateKey('sch_substitutes', legacy.value.substitutions);
+            const subs = legacy.value.substitutions;
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            // Convert day-name keys to this week's dates
+            for (const key of Object.keys(subs)) {
+              if (dayNames.includes(key)) {
+                const targetDate = getThisWeekDate(key);
+                if (targetDate) {
+                  subs[targetDate] = { ...(subs[targetDate] || {}), ...subs[key] };
+                  delete subs[key];
+                }
+              }
+            }
+            await api.schedule.updateKey('sch_substitutes', subs);
           }
           console.log('Migration complete.');
         }
@@ -394,7 +406,6 @@ export function ScheduleProvider({ children }) {
   }
 
   function getEffectiveTeacher(classId, date, periodId) {
-    // For backward compat, derive day from date if possible
     const subs = state.substitutions[date]?.[classId]?.[periodId];
     const subsArray = subs ? (Array.isArray(subs) ? subs : [subs]) : [];
     if (subsArray.length > 0) return { teacherId: subsArray[0].substituteId, isSubstitute: true, originalTeacherId: subsArray[0].originalTeacherId };
@@ -453,13 +464,12 @@ export function ScheduleProvider({ children }) {
         }
       }
       
-      // Substitutions (keyed by date - find today's/this week's date for this day)
+      // Substitutions (STRICTLY keyed by date)
       const thisWeekDate = getThisWeekDate(day);
-      // Check both the date-keyed and day-keyed substitutions for backward compat
-      const keysToCheck = thisWeekDate ? [thisWeekDate, day] : [day];
-      for (const key of keysToCheck) {
-        for (const compositeId of Object.keys(state.substitutions[key] || {})) {
-          const classSubstitutions = state.substitutions[key][compositeId];
+      if (thisWeekDate) {
+        const dateKey = thisWeekDate;
+        for (const compositeId of Object.keys(state.substitutions[dateKey] || {})) {
+          const classSubstitutions = state.substitutions[dateKey][compositeId];
           const parts = compositeId.split('__');
           const classId = parts[0];
           const section = parts[1] || 'A';

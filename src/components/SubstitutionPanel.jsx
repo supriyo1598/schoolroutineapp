@@ -106,11 +106,8 @@ export default function SubstitutionPanel() {
 
   const periodMap = Object.fromEntries(periods.map(p => [p.id, p]));
 
-  // Active substitutions for the selected date — merge date-keyed (new) and day-keyed (legacy)
-  const dateSubs = {
-    ...(substitutions[selectedDay] || {}),   // legacy: keyed by day name
-    ...(substitutions[selectedDate] || {}),  // new: keyed by date (takes priority)
-  };
+  // Active substitutions for the selected date — STRICTLY date-keyed
+  const dateSubs = substitutions[selectedDate] || {};
 
   return (
     <div className="tab-content">
